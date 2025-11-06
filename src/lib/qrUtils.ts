@@ -1,59 +1,57 @@
 import QRCodeStyling from "qr-code-styling";
 
-/**
- * Generate a framed PNG 1080x1350 containing a centered, non-stretched QR code
- * and an optional label beneath it. The QR modules are filled with a
- * brown->cream vertical gradient. Returns a data URL (image/png).
- */
-export const generateQRCode = async (
-  text: string,
-  label?: string
-): Promise<string> => {
-  // final output size (4:5) requested by user
-  const OUT_W = 1080;
-  const OUT_H = 1350;
-  // QR square side. Leave margins and space for label.
-  const QR_SIDE = 900; // fits comfortably within 1080 width
-  const qrX = Math.round((OUT_W - QR_SIDE) / 2);
-  const qrY = 80; // top margin
-
-  // Use qr-code-styling to render a transparent-background QR at QR_SIDE
-  return new Promise<string>((resolve, reject) => {
+export const generateQRCode = async (text: string, label?: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
     try {
+      // We'll render QR into a temporary canvas of qrSize x qrSize
+      const qrSize = 760; // square QR area
       const qr = new QRCodeStyling({
-        width: QR_SIDE,
-        height: QR_SIDE,
+        width: qrSize,
+        height: qrSize,
         type: "canvas",
         data: text,
         margin: 8,
         qrOptions: {
           errorCorrectionLevel: "H",
         },
-        // render modules in solid black, we'll mask with gradient later
+        // draw modules as solid (we'll apply gradient mask later)
         dotsOptions: {
           color: "#000000",
           type: "rounded",
         },
+        // transparent background so we can composite gradient under modules
         backgroundOptions: {
           color: "transparent",
         },
+        imageOptions: {
+          crossOrigin: "anonymous",
+          hideBackgroundDots: true,
+          imageSize: 0.18, // logo size relative to QR area
+          margin: 8,
+        },
+        image: "/android-chrome-512x512.png",
       });
 
-      // offscreen container for library to render into
-      const container = document.createElement("div");
-      container.style.position = "absolute";
-      container.style.left = "-9999px";
-      container.style.top = "-9999px";
-      container.style.width = `${QR_SIDE}px`;
-      container.style.height = `${QR_SIDE}px`;
-      document.body.appendChild(container);
-      qr.append(container);
+  // render QR into a hidden container appended to document so the
+  // qr-code-styling library can properly render canvas/svg
+  const container = document.createElement("div");
+  // keep off-screen but attached so styles and rendering work
+  container.style.position = "absolute";
+  container.style.left = "-9999px";
+  container.style.top = "-9999px";
+  // must provide render area size for qr-code-styling to draw
+  container.style.width = "800px";
+  container.style.height = "800px";
+  document.body.appendChild(container);
+  qr.append(container);
 
+      // First try library's getRawData (if available) which returns a Blob
       const tryGetRawData = async (): Promise<string | null> => {
         try {
           const anyQr: any = qr as any;
           if (typeof anyQr.getRawData === "function") {
             const blob: Blob = await anyQr.getRawData("png");
+            // convert blob to dataURL
             return await new Promise<string>((res, rej) => {
               const reader = new FileReader();
               reader.onload = () => res(String(reader.result));
@@ -62,118 +60,65 @@ export const generateQRCode = async (
             });
           }
         } catch (e) {
-          // continue to polling fallback
+          // fall through to poll
         }
         return null;
       };
 
-      const getCanvasFromContainer = (): HTMLCanvasElement | null => {
-        const c = container.querySelector("canvas") as HTMLCanvasElement | null;
-        return c;
+      // poll until qr-code-styling has rendered a canvas or svg inside the container
+      const getDataUrlFromContainer = (): string | null => {
+        const renderedCanvas = container.querySelector("canvas") as HTMLCanvasElement | null;
+        if (renderedCanvas) {
+          try {
+            return renderedCanvas.toDataURL("image/png");
+          } catch (e) {
+            return null;
+          }
+        }
+        const svg = container.querySelector("svg") as SVGElement | null;
+        if (svg) {
+          try {
+            const svgData = new XMLSerializer().serializeToString(svg);
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
+          } catch (e) {
+            return null;
+          }
+        }
+        return null;
       };
 
       (async () => {
-        // try fast path
+        // quick attempt via library API
         const raw = await tryGetRawData();
-        let qrDataUrl: string | null = null;
         if (raw) {
-          qrDataUrl = raw;
-        } else {
-          // poll for rendered canvas
-          let attempts = 0;
-          const maxAttempts = 40;
-          const delay = 100;
-          while (attempts < maxAttempts) {
-            const canv = getCanvasFromContainer();
-            if (canv) {
-              try {
-                qrDataUrl = canv.toDataURL("image/png");
-                break;
-              } catch (e) {
-                // try again
-              }
-            }
-            // wait
-            // eslint-disable-next-line no-await-in-loop
-            await new Promise((r) => setTimeout(r, delay));
-            attempts++;
-          }
+          if (container.parentNode) container.parentNode.removeChild(container);
+          return resolve(raw);
         }
 
-        if (!qrDataUrl) {
-          if (container.parentNode) container.parentNode.removeChild(container);
-          return reject(new Error("Failed to obtain QR rendering"));
-        }
+        let attempts = 0;
+        const maxAttempts = 40;
+        const attemptDelay = 100; // ms
 
-        // create an Image from the QR dataURL
-        const qrImg = new Image();
-        qrImg.crossOrigin = "anonymous";
-        qrImg.onload = () => {
-          try {
-            // final canvas
-            const final = document.createElement("canvas");
-            final.width = OUT_W;
-            final.height = OUT_H;
-            const ctx = final.getContext("2d");
-            if (!ctx) throw new Error("Unable to get canvas context");
-
-            // white background
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, OUT_W, OUT_H);
-
-            // draw vertical gradient over QR area
-            const grad = ctx.createLinearGradient(qrX, qrY, qrX, qrY + QR_SIDE);
-            // brown -> cream
-            grad.addColorStop(0, "#8B5E3C");
-            grad.addColorStop(1, "#FBF6EF");
-            ctx.fillStyle = grad;
-            ctx.fillRect(qrX, qrY, QR_SIDE, QR_SIDE);
-
-            // mask gradient so it only shows where QR modules are
-            ctx.globalCompositeOperation = "destination-in";
-            ctx.drawImage(qrImg, qrX, qrY, QR_SIDE, QR_SIDE);
-
-            // restore normal drawing
-            ctx.globalCompositeOperation = "source-over";
-
-            // draw label if provided
-            if (label) {
-              const padding = 80;
-              const maxTextWidth = OUT_W - padding * 2;
-              // dynamic font sizing
-              let fontSize = 64;
-              ctx.fillStyle = "#4E342E"; // dark brown for text
-              ctx.textAlign = "center";
-              ctx.textBaseline = "top";
-              do {
-                ctx.font = `600 ${fontSize}px sans-serif`;
-                const m = ctx.measureText(label);
-                if (m.width <= maxTextWidth || fontSize <= 18) break;
-                fontSize -= 2;
-              } while (fontSize > 18);
-
-              const textX = OUT_W / 2;
-              const textY = qrY + QR_SIDE + 40; // space below QR
-              ctx.fillText(label, textX, textY);
-            }
-
-            // cleanup
+        const poll = () => {
+          const dataUrl = getDataUrlFromContainer();
+          if (dataUrl) {
+            // cleanup container
             if (container.parentNode) container.parentNode.removeChild(container);
-            const finalData = final.toDataURL("image/png");
-            return resolve(finalData);
-          } catch (err) {
-            if (container.parentNode) container.parentNode.removeChild(container);
-            return reject(err);
+            return resolve(dataUrl);
           }
+          attempts++;
+          if (attempts > maxAttempts) {
+            if (container.parentNode) container.parentNode.removeChild(container);
+            return reject(new Error("Timed out waiting for QR render"));
+          }
+          setTimeout(poll, attemptDelay);
         };
-        qrImg.onerror = (e) => {
-          if (container.parentNode) container.parentNode.removeChild(container);
-          return reject(new Error("Failed to load QR image"));
-        };
-        qrImg.src = qrDataUrl;
+
+        poll();
       })();
     } catch (error) {
-      return reject(error);
+      console.error("Error generating styled QR:", error);
+      reject(error);
     }
   });
 };
