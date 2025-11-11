@@ -42,7 +42,8 @@ import {
   Package,
 } from "lucide-react";
 import { Item } from "@/types";
-import { generateQRCode, downloadQRCode } from "@/lib/qrUtils";
+import { exportItemLabelPNG } from "@/lib/qrUtils";
+import { createLabelDataURL, downloadLabelPNG } from "@/lib/labelRenderer";
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { barangAPI, uploadAPI } from "@/lib/api";
@@ -56,6 +57,7 @@ const Items = () => {
   const [qrCodeData, setQrCodeData] = useState<string>("");
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [currentQrCode, setCurrentQrCode] = useState("");
+  const [currentItemName, setCurrentItemName] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
@@ -155,11 +157,12 @@ const Items = () => {
       setItems([...items, newItem]);
       setIsAddDialogOpen(false);
 
-      // Generate and show QR Code
-      const qrData = await generateQRCode(newCode);
-      setQrCodeData(qrData);
-      setCurrentQrCode(newCode);
-      setQrDialogOpen(true);
+    // Generate and show composed label (quick preview)
+    const labelData = await createLabelDataURL(newCode, newItem.nama_barang);
+    setQrCodeData(labelData);
+    setCurrentQrCode(newCode);
+    setCurrentItemName(newItem.nama_barang);
+    setQrDialogOpen(true);
 
       toast.success("Barang berhasil ditambahkan!");
     } catch (error) {
@@ -221,16 +224,23 @@ const Items = () => {
     }
   };
 
-  const handleShowQR = async (kodeBarang: string) => {
-    const qrData = await generateQRCode(kodeBarang);
-    setQrCodeData(qrData);
+  const handleShowQR = async (kodeBarang: string, namaBarang?: string) => {
+    const label = await createLabelDataURL(kodeBarang, namaBarang || kodeBarang);
+    setQrCodeData(label);
     setCurrentQrCode(kodeBarang);
+    if (namaBarang) setCurrentItemName(namaBarang);
     setQrDialogOpen(true);
   };
 
-  const handleDownloadQR = () => {
-    downloadQRCode(qrCodeData, currentQrCode);
-    toast.success("QR Code berhasil diunduh!");
+  const handleDownloadQR = async () => {
+    try {
+      // download a simple composed label PNG (fast)
+      await downloadLabelPNG(currentQrCode, currentItemName || currentQrCode, currentQrCode);
+      toast.success("Label berhasil diunduh!");
+    } catch (err) {
+      console.error("Failed to download label:", err);
+      toast.error("Gagal menyiapkan file. Coba lagi.");
+    }
   };
 
   return (
@@ -369,7 +379,7 @@ const Items = () => {
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
-                              onClick={() => handleShowQR(item.kode_barang)}
+                              onClick={() => handleShowQR(item.kode_barang, item.nama_barang)}
                             >
                               <QrCode className="h-4 w-4" />
                             </Button>
@@ -549,12 +559,12 @@ const Items = () => {
               <DialogTitle>QR Code Barang</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="bg-muted p-4 rounded-lg text-center">
-                <code className="font-mono font-semibold">{currentQrCode}</code>
+              <div className="bg-orange-700/5 p-2 rounded-lg text-center">
+                <code className="font-mono text-2xl font-bold">{currentQrCode}</code>
               </div>
               {qrCodeData && (
                 <div className="flex justify-center">
-                  <img src={qrCodeData} alt="QR Code" className="w-64 h-64" />
+                  <img src={qrCodeData} alt="QR Code" className="h-full outline-orange-800 rounded-md outline-double" />
                 </div>
               )}
               <div className="flex gap-2">
