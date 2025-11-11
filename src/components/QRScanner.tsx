@@ -27,20 +27,9 @@ const QRScanner = ({
     "granted" | "denied" | "prompt"
   >("prompt");
 
-  useEffect(() => {
-    return () => {
-      // Cleanup: only stop if scanner was actually running
-      if (scannerRef.current && !hasStoppedRef.current && isScanning) {
-        hasStoppedRef.current = true;
-        scannerRef.current
-          .stop()
-          .catch(() => {})
-          .finally(() => {
-            scannerRef.current = null;
-          });
-      }
-    };
-  }, [isScanning]);
+  // NOTE: scanner cleanup is handled in the mount effect below which returns
+  // `stopScanner`. Removing the above conditional cleanup avoids complex
+  // interleavings that could leave media tracks running in some edge cases.
 
   const stopScanner = async (shouldClose?: boolean) => {
     if (hasStoppedRef.current) {
