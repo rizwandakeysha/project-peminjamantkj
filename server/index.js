@@ -17,37 +17,26 @@ const uploadRoutes = require('./routes/uploadRoutes');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS Configuration - FIXED
-const allowedOrigins = [
-  'http://localhost:8080',
-  'http://localhost:3000',
-  'http://127.0.0.1:8080',
-  'http://127.0.0.1:3000',
-  // Tambahkan domain production frontend Anda jika ada
-  // 'https://your-frontend-domain.com'
-];
+// ========== ULTRA PERMISSIVE CORS (UNTUK TESTING) ==========
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
 
+// Tambahan CORS middleware
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('Blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 600 // Cache preflight request for 10 minutes
+  origin: '*',
+  credentials: true
 }));
-
-// Handle preflight requests explicitly
-app.options('*', cors());
 
 // Middleware
 app.use(express.json());
@@ -61,7 +50,17 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'TKJ Peminjaman API Server',
     status: 'running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    cors: 'enabled'
+  });
+});
+
+// Test endpoint untuk cek CORS
+app.get('/api/test-cors', (req, res) => {
+  res.json({
+    success: true,
+    message: 'CORS is working!',
+    headers: req.headers
   });
 });
 
@@ -92,7 +91,7 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 CORS enabled for:`, allowedOrigins);
+  console.log(`🌐 CORS: ULTRA PERMISSIVE MODE (for testing)`);
   
   const dbInfo = process.env.DATABASE_URL 
     ? `postgres://${process.env.DATABASE_URL.split('@')[1]}` 
