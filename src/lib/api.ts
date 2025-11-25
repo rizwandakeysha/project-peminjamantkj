@@ -6,7 +6,6 @@ const API_BASE_URL =
   import.meta.env.VITE_API_URL || 
   "https://tkj-peminjaman-server-production.up.railway.app/api";
 
-console.log("🔗 API Base URL:", API_BASE_URL);
 
 // Helper function for API calls
 async function fetchAPI<T>(
@@ -15,7 +14,6 @@ async function fetchAPI<T>(
 ): Promise<{ success: boolean; data?: T; message?: string }> {
   try {
     const url = `${API_BASE_URL}${endpoint}`;
-    console.log("📡 Fetching:", url);
 
     const response = await fetch(url, {
       ...options,
@@ -25,8 +23,6 @@ async function fetchAPI<T>(
       },
       mode: "cors", // Explicitly set CORS mode
     });
-
-    console.log("📥 Response status:", response.status);
 
     const data = await response.json();
 
@@ -186,7 +182,6 @@ export const uploadAPI = {
     formData.append("image", file);
 
     const url = `${API_BASE_URL}/upload/image`;
-    console.log("📤 Uploading to:", url);
 
     const response = await fetch(url, {
       method: "POST",
