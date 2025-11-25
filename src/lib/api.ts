@@ -1,9 +1,12 @@
 // API Configuration and Helper Functions
 import { Item, Borrowing, BorrowingFormData } from "@/types";
 
-// Change this to your server IP for LAN access
-// Example: http://192.168.1.100:3001/api
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+// FIXED: Better API URL handling
+const API_BASE_URL = 
+  import.meta.env.VITE_API_URL || 
+  "https://tkj-peminjaman-server-production.up.railway.app/api";
+
+console.log("🔗 API Base URL:", API_BASE_URL);
 
 // Helper function for API calls
 async function fetchAPI<T>(
@@ -11,13 +14,19 @@ async function fetchAPI<T>(
   options?: RequestInit
 ): Promise<{ success: boolean; data?: T; message?: string }> {
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log("📡 Fetching:", url);
+
+    const response = await fetch(url, {
       ...options,
       headers: {
         "Content-Type": "application/json",
         ...options?.headers,
       },
+      mode: "cors", // Explicitly set CORS mode
     });
+
+    console.log("📥 Response status:", response.status);
 
     const data = await response.json();
 
@@ -27,7 +36,7 @@ async function fetchAPI<T>(
 
     return data;
   } catch (error) {
-    console.error("API Error:", error);
+    console.error("❌ API Error:", error);
     throw error;
   }
 }
@@ -176,9 +185,13 @@ export const uploadAPI = {
     const formData = new FormData();
     formData.append("image", file);
 
-    const response = await fetch(`${API_BASE_URL}/upload/image`, {
+    const url = `${API_BASE_URL}/upload/image`;
+    console.log("📤 Uploading to:", url);
+
+    const response = await fetch(url, {
       method: "POST",
       body: formData,
+      mode: "cors",
     });
 
     const data = await response.json();
@@ -194,7 +207,9 @@ export const uploadAPI = {
 // Helper to check if backend is available
 export const checkBackendConnection = async (): Promise<boolean> => {
   try {
-    const response = await fetch(API_BASE_URL.replace("/api", ""));
+    const response = await fetch(API_BASE_URL.replace("/api", ""), {
+      mode: "cors",
+    });
     return response.ok;
   } catch {
     return false;
