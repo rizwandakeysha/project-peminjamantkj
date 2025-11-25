@@ -17,33 +17,46 @@ const uploadRoutes = require('./routes/uploadRoutes');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ========== ULTRA PERMISSIVE CORS (UNTUK TESTING) ==========
+// ============================================
+// CRITICAL: CORS MUST BE FIRST - BEFORE ROUTES
+// ============================================
+
+// Ultra permissive CORS for all origins
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Max-Age', '86400'); // 24 hours
   
-  // Handle preflight
+  // Handle preflight immediately
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+    console.log('✅ Preflight request handled for:', req.path);
+    return res.status(200).end();
   }
   
   next();
 });
 
-// Tambahan CORS middleware
+// Backup CORS middleware
 app.use(cors({
   origin: '*',
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 
-// Middleware
+// ============================================
+// MIDDLEWARE - AFTER CORS
+// ============================================
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Static files (untuk foto yang diupload)
+// Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ============================================
+// ROUTES
+// ============================================
 
 // Health check
 app.get('/', (req, res) => {
@@ -51,16 +64,17 @@ app.get('/', (req, res) => {
     message: 'TKJ Peminjaman API Server',
     status: 'running',
     timestamp: new Date().toISOString(),
-    cors: 'enabled'
+    cors: 'ENABLED - Ultra Permissive Mode'
   });
 });
 
-// Test endpoint untuk cek CORS
+// Test CORS
 app.get('/api/test-cors', (req, res) => {
   res.json({
     success: true,
-    message: 'CORS is working!',
-    headers: req.headers
+    message: 'CORS is working perfectly!',
+    origin: req.headers.origin,
+    method: req.method
   });
 });
 
@@ -70,9 +84,13 @@ app.use('/api/peminjaman', peminjamanRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
 
+// ============================================
+// ERROR HANDLERS
+// ============================================
+
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('❌ Error:', err);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
@@ -84,14 +102,19 @@ app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: 'Endpoint not found',
+    path: req.path
   });
 });
 
-// Start server
+// ============================================
+// START SERVER
+// ============================================
+
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📁 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 CORS: ULTRA PERMISSIVE MODE (for testing)`);
+  console.log(`🌐 CORS: ULTRA PERMISSIVE MODE ACTIVE`);
+  console.log(`⚠️  WARNING: This allows ALL origins - use only for development!`);
   
   const dbInfo = process.env.DATABASE_URL 
     ? `postgres://${process.env.DATABASE_URL.split('@')[1]}` 
