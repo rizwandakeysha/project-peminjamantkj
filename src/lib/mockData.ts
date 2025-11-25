@@ -6,6 +6,7 @@ export const mockItems: Item[] = [
     id: 1,
     kode_barang: "BRG-001",
     nama_barang: "Tang Crimping RJ45",
+  kode_jenis: "TKJ-LTRR",
     jumlah_stok: 10,
     jumlah_dipinjam: 3,
     foto_barang: "https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400",
@@ -16,6 +17,7 @@ export const mockItems: Item[] = [
     id: 2,
     kode_barang: "BRG-002",
     nama_barang: "Kabel Tester",
+  kode_jenis: "TKJ-LTRR",
     jumlah_stok: 8,
     jumlah_dipinjam: 2,
     foto_barang: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400",
@@ -26,6 +28,7 @@ export const mockItems: Item[] = [
     id: 3,
     kode_barang: "BRG-003",
     nama_barang: "Obeng Set",
+  kode_jenis: "TKJ-LTRR",
     jumlah_stok: 15,
     jumlah_dipinjam: 5,
     foto_barang: "https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=400",
@@ -36,6 +39,7 @@ export const mockItems: Item[] = [
     id: 4,
     kode_barang: "BRG-004",
     nama_barang: "LAN Tester",
+  kode_jenis: "TKJ-LTRR",
     jumlah_stok: 6,
     jumlah_dipinjam: 1,
     foto_barang: "https://images.unsplash.com/photo-1598986646512-9330bcc4c0dc?w=400",
@@ -46,6 +50,7 @@ export const mockItems: Item[] = [
     id: 5,
     kode_barang: "BRG-005",
     nama_barang: "Kabel UTP Cat6 (Roll)",
+  kode_jenis: "TKJ-CABL",
     jumlah_stok: 20,
     jumlah_dipinjam: 8,
     foto_barang: "https://images.unsplash.com/photo-1551818014-7c8ace9c3084?w=400",
@@ -56,6 +61,7 @@ export const mockItems: Item[] = [
     id: 6,
     kode_barang: "BRG-006",
     nama_barang: "RJ45 Connector (Box)",
+  kode_jenis: "TKJ-CONN",
     jumlah_stok: 50,
     jumlah_dipinjam: 15,
     foto_barang: "https://images.unsplash.com/photo-1597852074816-d933c7d2b988?w=400",
@@ -97,4 +103,17 @@ export const mockBorrowings: Borrowing[] = [
     created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     nama_barang: "Obeng Set",
   },
+];
+
+// Mock lists for borrowers (teachers and students)
+export const mockTeachers = [
+  { name: "Andi Bayu", nip: "NIP-001" },
+  { name: "Ira Rosmalina", nip: "NIP-002" },
+  { name: "Budi Santoso", nip: "NIP-003" },
+];
+
+export const mockStudents = [
+  { name: "Rizwan A", nis: "NIS-1001" },
+  { name: "Siti Nur", nis: "NIS-1002" },
+  { name: "Ahmad Fauzi", nis: "NIS-1003" },
 ];

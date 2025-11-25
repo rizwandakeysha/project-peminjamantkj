@@ -8,6 +8,8 @@ export interface Item {
   jumlah_dipinjam: number;
   foto_barang?: string;
   notes?: string;
+  // Optional jenis kode to link item to a jenis (type)
+  kode_jenis?: string;
   created_at: string;
 }
 

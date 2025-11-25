@@ -18,6 +18,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Item, BorrowingFormData } from "@/types";
+import { mockItems, mockTeachers, mockStudents } from "@/lib/mockData";
 // Removed client-side code generation; server is source of truth
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -32,6 +33,7 @@ const BorrowFlow = () => {
   const [selectedItem, setSelectedItem] = useState<Item | null>(
     location.state?.selectedItem || null
   );
+  const [borrowerRole, setBorrowerRole] = useState<"guru" | "siswa">("guru");
   const [scanMode, setScanMode] = useState<"qr" | "manual">("qr");
   const [cameraUnavailable, setCameraUnavailable] = useState<boolean>(false);
   const [cameraChecked, setCameraChecked] = useState<boolean>(false);
@@ -43,6 +45,10 @@ const BorrowFlow = () => {
     id_barang: 0,
     jumlah: 1,
   });
+  // For jenis (type) scan flows
+  const [selectedJenisCode, setSelectedJenisCode] = useState<string | null>(null);
+  const [availableItems, setAvailableItems] = useState<Item[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [photoData, setPhotoData] = useState<string>("");
   const [borrowingCode, setBorrowingCode] = useState<string>("");
 
@@ -89,14 +95,26 @@ const BorrowFlow = () => {
 
   const handleQRScan = async (decodedText: string) => {
     try {
+      // First check mockItems for kode_jenis match (jenis scan)
+      const matchesJenis = mockItems.filter((i) => i.kode_jenis === decodedText);
+      if (matchesJenis.length > 0) {
+        setSelectedJenisCode(decodedText);
+        setAvailableItems(matchesJenis);
+        setSelectedItem(null);
+        setSelectedItemIds([]);
+        setCurrentStep("form");
+        return;
+      }
+
+      // Otherwise, fallback to fetching single barang by kode
       const item = await barangAPI.getByKode(decodedText);
       if (item) {
         const available = item.jumlah_stok - item.jumlah_dipinjam;
         if (available > 0) {
           setSelectedItem(item);
           setFormData((prev) => ({ ...prev, id_barang: item.id }));
+          setSelectedJenisCode(item.kode_jenis || null);
           setCurrentStep("form");
-          // toast.success(`Barang ditemukan: ${item.nama_barang}`);
         } else {
           toast.error("Maaf, barang tidak tersedia saat ini");
         }
@@ -122,26 +140,35 @@ const BorrowFlow = () => {
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (
-      !formData.nama_peminjam ||
-      !formData.kontak ||
-      !formData.keperluan ||
-      !formData.guru_pendamping
-    ) {
+    // Basic validation
+    if (!formData.nama_peminjam || !formData.kontak || !formData.keperluan) {
       toast.error("Mohon lengkapi semua field");
       return;
     }
 
-    if (!selectedItem || formData.jumlah <= 0) {
-      toast.error("Data barang tidak valid");
+    // If borrower is siswa, require guru pendamping
+    if (borrowerRole === "siswa" && !formData.guru_pendamping) {
+      toast.error("Pilih guru pendamping untuk siswa");
       return;
     }
 
-    const available = selectedItem.jumlah_stok - selectedItem.jumlah_dipinjam;
-    if (formData.jumlah > available) {
-      toast.error(`Stok tidak mencukupi. Tersedia: ${available}`);
-      return;
+    // If user selected specific items from a jenis, ensure at least one selected
+    if (availableItems.length > 0) {
+      if (selectedItemIds.length === 0) {
+        toast.error("Pilih minimal satu barang dari daftar");
+        return;
+      }
+    } else {
+      if (!selectedItem || formData.jumlah <= 0) {
+        toast.error("Data barang tidak valid");
+        return;
+      }
+
+      const available = selectedItem.jumlah_stok - selectedItem.jumlah_dipinjam;
+      if (formData.jumlah > available) {
+        toast.error(`Stok tidak mencukupi. Tersedia: ${available}`);
+        return;
+      }
     }
 
     setCurrentStep("photo");
@@ -149,22 +176,50 @@ const BorrowFlow = () => {
 
   const handlePhotoCapture = async (imageData: string) => {
     setPhotoData(imageData);
-    if (!selectedItem) {
+
+    // Prepare list of item ids to create borrowings for
+    let itemIdsToBorrow: number[] = [];
+    if (availableItems.length > 0) {
+      itemIdsToBorrow = selectedItemIds.slice();
+    } else if (selectedItem) {
+      itemIdsToBorrow = [selectedItem.id];
+    } else {
       toast.error("Barang belum dipilih");
       return;
     }
+
     try {
-      const result = await peminjamanAPI.create({
-        id_barang: Number(selectedItem.id),
-        nama_peminjam: formData.nama_peminjam.trim(),
-        kontak: formData.kontak?.trim() || null,
-        keperluan: formData.keperluan.trim(),
-        guru_pendamping: formData.guru_pendamping.trim(),
-        jumlah: Number(formData.jumlah),
-        foto_credential: imageData || null,
-      });
-      // Use server-generated code
-      setBorrowingCode(result.kode_peminjaman);
+      const createdCodes: string[] = [];
+
+      if (availableItems.length > 0) {
+        // Create one borrowing per selected individual item (jumlah = 1)
+        for (const id of itemIdsToBorrow) {
+          const result = await peminjamanAPI.create({
+            id_barang: Number(id),
+            nama_peminjam: formData.nama_peminjam.trim(),
+            kontak: formData.kontak?.trim() || null,
+            keperluan: formData.keperluan.trim(),
+            guru_pendamping: formData.guru_pendamping.trim(),
+            jumlah: 1,
+            foto_credential: imageData || null,
+          });
+          if (result && result.kode_peminjaman) createdCodes.push(result.kode_peminjaman);
+        }
+      } else {
+        // Single item, possibly multiple jumlah
+        const result = await peminjamanAPI.create({
+          id_barang: Number(selectedItem!.id),
+          nama_peminjam: formData.nama_peminjam.trim(),
+          kontak: formData.kontak?.trim() || null,
+          keperluan: formData.keperluan.trim(),
+          guru_pendamping: formData.guru_pendamping.trim(),
+          jumlah: Number(formData.jumlah),
+          foto_credential: imageData || null,
+        });
+        if (result && result.kode_peminjaman) createdCodes.push(result.kode_peminjaman);
+      }
+
+      setBorrowingCode(createdCodes.join(", ") || "");
       setCurrentStep("summary");
       toast.success("Peminjaman berhasil dibuat!");
     } catch (error) {
@@ -307,53 +362,108 @@ const BorrowFlow = () => {
         )}
 
         {/* Step: Form */}
-        {currentStep === "form" && selectedItem && (
+        {currentStep === "form" && (selectedItem || availableItems.length > 0) && (
           <Card>
             <CardHeader>
               <CardTitle>Data Peminjaman</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleFormSubmit} className="space-y-4">
-                {/* Selected Item Info */}
+                {/* Selected Item / Jenis Info */}
                 <div className="bg-accent/50 p-4 rounded-lg mb-4">
-                  <div className="flex items-center gap-3">
-                    {selectedItem.foto_barang && (
-                      <img
-                        src={selectedItem.foto_barang}
-                        alt={selectedItem.nama_barang}
-                        className="w-16 h-16 object-cover rounded"
-                      />
-                    )}
+                  {availableItems.length > 0 ? (
                     <div>
-                      <p className="font-semibold">
-                        {selectedItem.nama_barang}
-                      </p>
+                      <p className="font-semibold">Jenis: {selectedJenisCode}</p>
                       <p className="text-sm text-muted-foreground">
-                        Kode: {selectedItem.kode_barang}
+                        Pilih barang dari daftar jenis untuk dipinjam
                       </p>
-                      <p className="text-sm text-muted-foreground">
-                        Tersedia:{" "}
-                        {selectedItem.jumlah_stok -
-                          selectedItem.jumlah_dipinjam}
-                      </p>
+                      <div className="mt-3 grid gap-2">
+                        {availableItems.map((it) => (
+                          <label key={it.id} className="flex items-center gap-3 p-2 rounded border">
+                            <input
+                              type="checkbox"
+                              checked={selectedItemIds.includes(it.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedItemIds((s) => [...s, it.id]);
+                                else setSelectedItemIds((s) => s.filter((id) => id !== it.id));
+                              }}
+                            />
+                            {it.foto_barang && (
+                              <img src={it.foto_barang} alt={it.nama_barang} className="w-12 h-12 object-cover rounded" />
+                            )}
+                            <div className="flex-1">
+                              <div className="font-medium">{it.nama_barang}</div>
+                              <div className="text-xs text-muted-foreground">Kode: {it.kode_barang} — Tersedia: {it.jumlah_stok - it.jumlah_dipinjam}</div>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      {selectedItem?.foto_barang && (
+                        <img src={selectedItem!.foto_barang} alt={selectedItem!.nama_barang} className="w-16 h-16 object-cover rounded" />
+                      )}
+                      <div>
+                        <p className="font-semibold">{selectedItem?.nama_barang}</p>
+                        <p className="text-sm text-muted-foreground">Kode: {selectedItem?.kode_barang}</p>
+                        <p className="text-sm text-muted-foreground">Tersedia: {selectedItem && (selectedItem.jumlah_stok - selectedItem.jumlah_dipinjam)}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
+                    <Label htmlFor="role">Meminjam sebagai *</Label>
+                    <select
+                      id="role"
+                      value={borrowerRole}
+                      onChange={(e) => setBorrowerRole(e.target.value as any)}
+                      className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
+                    >
+                      <option value="guru">Guru</option>
+                      <option value="siswa">Siswa</option>
+                    </select>
+                  </div>
+
+                  <div>
                     <Label htmlFor="nama">Nama Peminjam *</Label>
-                    <Input
-                      id="nama"
-                      value={formData.nama_peminjam}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          nama_peminjam: e.target.value,
-                        })
-                      }
-                      required
-                    />
+                    {borrowerRole === "guru" ? (
+                      <select
+                        id="nama"
+                        value={formData.nama_peminjam}
+                        onChange={(e) =>
+                          setFormData({ ...formData, nama_peminjam: e.target.value })
+                        }
+                        className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
+                        required
+                      >
+                        <option value="">Pilih Guru</option>
+                        {mockTeachers.map((t) => (
+                          <option key={t.nip} value={`${t.name} - ${t.nip}`}>
+                            {`${t.name} - ${t.nip}`}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select
+                        id="nama"
+                        value={formData.nama_peminjam}
+                        onChange={(e) =>
+                          setFormData({ ...formData, nama_peminjam: e.target.value })
+                        }
+                        className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
+                        required
+                      >
+                        <option value="">Pilih Siswa</option>
+                        {mockStudents.map((s) => (
+                          <option key={s.nis} value={`${s.name} - ${s.nis}`}>
+                            {`${s.name} - ${s.nis}`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="kontak">Nomor Kontak (WA) *</Label>
@@ -384,41 +494,52 @@ const BorrowFlow = () => {
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
+                  {borrowerRole === "siswa" && (
+                    <div>
+                      <Label htmlFor="guru">Guru Pendamping *</Label>
+                      <select
+                        id="guru"
+                        value={formData.guru_pendamping}
+                        onChange={(e) =>
+                          setFormData({ ...formData, guru_pendamping: e.target.value })
+                        }
+                        className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
+                        required
+                      >
+                        <option value="">Pilih Guru</option>
+                        <option value="Guru A">Pak Andi Bayu, S.Pd.</option>
+                        <option value="Guru B">Bu Ira Rosmalina, M.Pd.</option>
+                        <option value="Guru C">Guru C</option>
+                      </select>
+                    </div>
+                  )}
+
                   <div>
-                    <Label htmlFor="guru">Guru Pendamping *</Label>
-                    <select
-                      id="guru"
-                      value={formData.guru_pendamping}
-                      onChange={(e) =>
-                        setFormData({ ...formData, guru_pendamping: e.target.value })
-                      }
-                      className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
-                      required
-                    >
-                      <option value="">Pilih Guru</option>
-                      <option value="Guru A">Pak Andi Bayu, S.Pd.</option>
-                      <option value="Guru B">Bu Ira Rosmalina, M.Pd.</option>
-                      <option value="Guru C">Guru C</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="jumlah">Jumlah Barang *</Label>
-                    <Input
-                      id="jumlah"
-                      type="number"
-                      min="1"
-                      max={
-                        selectedItem.jumlah_stok - selectedItem.jumlah_dipinjam
-                      }
-                      value={formData.jumlah}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          jumlah: parseInt(e.target.value),
-                        })
-                      }
-                      required
-                    />
+                    {/* If picking specific items from a jenis, jumlah is derived from selections */}
+                    {availableItems.length > 0 ? (
+                      <div>
+                        <Label>Items dipilih:</Label>
+                        <p className="text-sm text-muted-foreground">{selectedItemIds.length} item terpilih</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor="jumlah">Jumlah Barang *</Label>
+                        <Input
+                          id="jumlah"
+                          type="number"
+                          min="1"
+                          max={selectedItem ? selectedItem.jumlah_stok - selectedItem.jumlah_dipinjam : 1}
+                          value={formData.jumlah}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              jumlah: parseInt(e.target.value),
+                            })
+                          }
+                          required
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -467,7 +588,7 @@ const BorrowFlow = () => {
         )}
 
         {/* Step: Summary */}
-        {currentStep === "summary" && selectedItem && (
+        {currentStep === "summary" && (
           <Card>
             <CardHeader>
               <div className="text-center">
@@ -478,7 +599,7 @@ const BorrowFlow = () => {
                   Peminjaman Berhasil!
                 </CardTitle>
                 <p className="text-muted-foreground">
-                  Simpan kode peminjaman di bawah untuk proses pengembalian
+                  Pemberitahuan: kode peminjaman di bawah hanya sebagai penanda. Tidak perlu disimpan untuk proses pengembalian.
                 </p>
               </div>
             </CardHeader>
@@ -497,8 +618,7 @@ const BorrowFlow = () => {
                 >
                   <AlertCircle className="h-4 w-4 text-warning" />
                   <AlertDescription className="text-warning-foreground text-black">
-                    <strong>PENTING!</strong> Catat atau foto kode ini. Kode
-                    diperlukan saat pengembalian barang.
+                    <strong>Catatan:</strong> Kode ini hanya penanda internal.
                   </AlertDescription>
                 </Alert>
               </div>
@@ -507,16 +627,29 @@ const BorrowFlow = () => {
               <div className="space-y-3">
                 <h4 className="font-semibold">Detail Peminjaman:</h4>
                 <div className="grid gap-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Barang:</span>
-                    <span className="font-medium">
-                      {selectedItem.nama_barang}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Jumlah:</span>
-                    <span className="font-medium">{formData.jumlah}</span>
-                  </div>
+                  {availableItems.length > 0 ? (
+                    <div className="space-y-2">
+                      <span className="text-muted-foreground">Barang dipilih:</span>
+                      <div className="text-sm space-y-1">
+                        {availableItems
+                          .filter((it) => selectedItemIds.includes(it.id))
+                          .map((it) => (
+                            <div key={it.id} className="font-medium">{it.nama_barang} — {it.kode_barang}</div>
+                          ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Barang:</span>
+                        <span className="font-medium">{selectedItem?.nama_barang}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Jumlah:</span>
+                        <span className="font-medium">{formData.jumlah}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Peminjam:</span>
                     <span className="font-medium">
