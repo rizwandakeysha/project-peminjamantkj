@@ -105,15 +105,98 @@ export const mockBorrowings: Borrowing[] = [
   },
 ];
 
-// Mock lists for borrowers (teachers and students)
-export const mockTeachers = [
-  { name: "Andi Bayu", nip: "NIP-001" },
-  { name: "Ira Rosmalina", nip: "NIP-002" },
-  { name: "Budi Santoso", nip: "NIP-003" },
+// Available classes
+export const kelasOptions = ["X TKJ 1", "X TKJ 2", "X TKJ 3", "XI TKJ 1", "XI TKJ 2", "XI TKJ 3"];
+
+// Generate 100 mock teachers
+const teacherFirstNames = [
+  "Andi", "Budi", "Citra", "Dedi", "Eka", "Feri", "Gita", "Hendra", "Ira", "Joko",
+  "Karin", "Lina", "Mitra", "Nanda", "Oka", "Putri", "Qintar", "Rindi", "Susi", "Tika",
+  "Udin", "Vina", "Wawan", "Xander", "Yudi", "Zara", "Agus", "Bella", "Cerita", "Dadan",
+  "Eka", "Fahmi", "Gina", "Hafis", "Inti", "Joko", "Kiki", "Livia", "Meri", "Novi",
+  "Ocha", "Peni", "Qonita", "Rani", "Sigit", "Tania", "Ulfa", "Vega", "Winda", "Xenia",
+  "Yasir", "Zahra", "Alvaro", "Bambang", "Ceria", "Dani", "Elisa", "Fajar", "Gilang", "Hani",
+  "Irwan", "Josua", "Karma", "Lena", "Marno", "Nandi", "Osman", "Purno", "Querino", "Rian",
+  "Sandi", "Tino", "Ulfah", "Vital", "Widia", "Xenia", "Yolanda", "Zikri", "Abdur", "Binar",
+  "Castor", "Danang", "Elmo", "Fanda", "Gading", "Hafiz", "Ilyas", "Jarwo", "Karim", "Liang"
 ];
 
-export const mockStudents = [
-  { name: "Rizwan A", nis: "NIS-1001" },
-  { name: "Siti Nur", nis: "NIS-1002" },
-  { name: "Ahmad Fauzi", nis: "NIS-1003" },
+const teacherLastNames = [
+  "Bayu", "Santoso", "Wijaya", "Kusuma", "Suharto", "Hartono", "Gunawan", "Pratama", "Rahman", "Ibrahim",
+  "Setya", "Prabowo", "Suryanto", "Budiman", "Ardhana", "Rosmalina", "Handoko", "Setiawan", "Mahendra", "Wijaksono",
+  "Handoyo", "Sutrisno", "Hapsara", "Mulyadi", "Supriyanto", "Wardhana", "Kusnandar", "Subagyo", "Wijaya", "Rismanto"
 ];
+
+export const mockTeachers = Array.from({ length: 100 }, (_, i) => ({
+  name: `${teacherFirstNames[i % teacherFirstNames.length]} ${teacherLastNames[i % teacherLastNames.length]}`,
+  nip: `NIP-${String(i + 1).padStart(3, "0")}`,
+}));
+
+// Mock students with kelas data - organized by class
+const studentDataByClass = {
+  "X TKJ 1": [
+    { name: "ABDULLOH ARRAFIFF", nis: "14301/2364.066" },
+    { name: "ABY NUR SYAHDANI", nis: "14302/2365.066" },
+    { name: "ADAM PRANANDA SUHENDAR", nis: "14304/2367.066" },
+    { name: "ADEVITA INDRIYANTI", nis: "14305/2368.066" },
+    { name: "AHMAD MAFTUHUR RIZQY", nis: "14309/2372.066" },
+    { name: "AMELDA FITRI AYU PERMATA", nis: "14317/2380.066" },
+    { name: "BENY WAHYUDI AKBAR", nis: "14326/2389.066" },
+    { name: "CHARLY ANANDA PUTRA AFANDI", nis: "14329/2392.066" },
+    { name: "CINTA AFIDAHTUL ISMA AINI", nis: "14330/2393.066" },
+    { name: "FADHIL MAULANA PRATAMA", nis: "14339/2402.066" },
+    { name: "FATIMAH", nis: "14341/2404.066" },
+    { name: "FINO SEPTIAN AFANDI", nis: "14343/2406.066" },
+    { name: "HILMIY FAKHRY AL FARIZI", nis: "14345/2408.066" },
+    { name: "IBRAHIM SALIM SYAKIF", nis: "14346/2409.066" },
+    { name: "INGE PANDALUWANGSA", nis: "14347/2410.066" },
+    { name: "KEVIN WIDDAD BRAMANTYO", nis: "14349/2412.066" },
+    { name: "MASHI ARDIKA", nis: "14357/2420.066" },
+    { name: "MAULIDHA LAILATUL ZANNA", nis: "14358/2421.066" },
+    { name: "MAYLA DIVA SEVILYA", nis: "14359/2422.066" },
+    { name: "MEGA RIZKY WIDIYANTO", nis: "14360/2423.066" },
+    { name: "MOCH FADIL MAULIDIANSYAH", nis: "14361/2424.066" },
+    { name: "MOCHAMMAD JUNINHO PRATAMA", nis: "14364/2427.066" },
+    { name: "MUHAMAD MARCELINO SYAHPUTRA", nis: "14367/2430.066" },
+    { name: "MUHAMMAD RAFAEL DANANG PRIYONO", nis: "14376/2439.066" },
+    { name: "MUHAMMAD SATRIA PUTRA PRATAMA", nis: "14379/2442.066" },
+    { name: "OKTAVIAN AVIS SHOLEH", nis: "14382/2445.066" },
+    { name: "RAFA SHOKHIBUL BAKHRI", nis: "14383/2446.066" },
+  ],
+  "X TKJ 2": Array.from({ length: 25 }, (_, i) => ({
+    name: `Tali Goci ${String(i + 1).padStart(2, "0")}`,
+    nis: `14400/2500.06${String(i).padStart(1, "0")}`,
+  })),
+  "X TKJ 3": Array.from({ length: 25 }, (_, i) => ({
+    name: `Jian Ayune ${String(i + 1).padStart(2, "0")}`,
+    nis: `14425/2525.06${String(i).padStart(1, "0")}`,
+  })),
+  "XI TKJ 1": Array.from({ length: 10 }, (_, i) => ({
+    name: `Owalah Yowes ${String(i + 1).padStart(2, "0")}`,
+    nis: `13700/2350.06${String(i).padStart(1, "0")}`,
+  })),
+  "XI TKJ 2": Array.from({ length: 10 }, (_, i) => ({
+    name: `Yanto Hay ${String(i + 1).padStart(2, "0")}`,
+    nis: `13710/2360.06${String(i).padStart(1, "0")}`,
+  })),
+  "XI TKJ 3": Array.from({ length: 3 }, (_, i) => ({
+    name: `ZAHRATUS SADIYAH`,
+    nis: `13781/2361.066`,
+  })),
+};
+
+export const mockStudents = Array.from(
+  { length: 100 },
+  (_, i) => {
+    const klasIndex = Math.floor(i / 20);
+    const kelas = kelasOptions[klasIndex] || "X TKJ 1";
+    const classStudents = studentDataByClass[kelas] || [];
+    const studentIndex = i % Math.max(classStudents.length, 1);
+    const student = classStudents[studentIndex] || { name: `Student ${i}`, nis: `NIS-${1001 + i}` };
+    return {
+      name: student.name,
+      nis: student.nis,
+      kelas,
+    };
+  }
+);

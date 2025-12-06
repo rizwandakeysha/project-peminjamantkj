@@ -38,7 +38,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Item, BorrowingFormData } from "@/types";
-import { mockItems, mockTeachers, mockStudents } from "@/lib/mockData";
+import { mockItems, mockTeachers, mockStudents, kelasOptions } from "@/lib/mockData";
 // Removed client-side code generation; server is source of truth
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -76,6 +76,9 @@ const BorrowFlow = () => {
   const [openRolePicker, setOpenRolePicker] = useState(false);
   const [openGuruPendamping, setOpenGuruPendamping] = useState(false);
   const [searchGuruPendamping, setSearchGuruPendamping] = useState("");
+  const [selectedKelas, setSelectedKelas] = useState<string>("");
+  const [openKelas, setOpenKelas] = useState(false);
+  const [searchKelas, setSearchKelas] = useState("");
 
   // Check camera availability on mount
   useEffect(() => {
@@ -174,6 +177,12 @@ const BorrowFlow = () => {
     // If borrower is siswa, require guru pendamping
     if (borrowerRole === "siswa" && !formData.guru_pendamping) {
       toast.error("Pilih guru pendamping untuk siswa");
+      return;
+    }
+
+    // If borrower is siswa, require kelas
+    if (borrowerRole === "siswa" && !selectedKelas) {
+      toast.error("Pilih kelas untuk siswa");
       return;
     }
 
@@ -464,6 +473,8 @@ const BorrowFlow = () => {
                                 setOpenRolePicker(false);
                                 // clear nama peminjam when role changes
                                 setFormData({ ...formData, nama_peminjam: "", guru_pendamping: "" });
+                                setSelectedKelas("");
+                                setSearchNamaPeminjam("");
                               }}
                             >
                               <Check className={cn("mr-2 h-4 w-4", borrowerRole === "guru" ? "opacity-100" : "opacity-0")} />
@@ -475,6 +486,8 @@ const BorrowFlow = () => {
                                 setBorrowerRole("siswa");
                                 setOpenRolePicker(false);
                                 setFormData({ ...formData, nama_peminjam: "", guru_pendamping: "" });
+                                setSelectedKelas("");
+                                setSearchNamaPeminjam("");
                               }}
                             >
                               <Check className={cn("mr-2 h-4 w-4", borrowerRole === "siswa" ? "opacity-100" : "opacity-0")} />
@@ -485,6 +498,62 @@ const BorrowFlow = () => {
                       </PopoverContent>
                     </Popover>
                   </div>
+
+                  {borrowerRole === "siswa" && (
+                    <div>
+                      <Label htmlFor="kelas">Kelas *</Label>
+                      <Popover open={openKelas} onOpenChange={setOpenKelas}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            id="kelas"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openKelas}
+                            className="mt-1 w-full justify-between"
+                          >
+                            {selectedKelas || "Pilih Kelas..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput
+                              placeholder="Cari kelas..."
+                              value={searchKelas}
+                              onValueChange={setSearchKelas}
+                            />
+                            <CommandEmpty>Tidak ada kelas ditemukan</CommandEmpty>
+                            <div className="max-h-44 overflow-y-auto">
+                              {kelasOptions
+                                .filter((k) => k.toLowerCase().includes(searchKelas.toLowerCase()))
+                                .map((k) => (
+                                  <CommandItem
+                                    key={k}
+                                    value={k}
+                                    onSelect={(currentValue) => {
+                                      setSelectedKelas(currentValue === selectedKelas ? "" : currentValue);
+                                      setOpenKelas(false);
+                                      setSearchKelas("");
+                                      // Reset nama_peminjam when kelas changes
+                                      setFormData({ ...formData, nama_peminjam: "" });
+                                      setSearchNamaPeminjam("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        selectedKelas === k ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {k}
+                                  </CommandItem>
+                                ))}
+                            </div>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  )}
 
                   <div>
                     <Label htmlFor="nama">Nama Peminjam *</Label>
@@ -540,12 +609,13 @@ const BorrowFlow = () => {
                             ) : (
                               mockStudents
                                 .filter((s) =>
-                                  `${s.name} - ${s.nis}`.toLowerCase().includes(searchNamaPeminjam.toLowerCase())
+                                  (selectedKelas === "" || s.kelas === selectedKelas) &&
+                                  `${s.name} – ${s.nis} – ${s.kelas}`.toLowerCase().includes(searchNamaPeminjam.toLowerCase())
                                 )
                                 .map((s) => (
                                   <CommandItem
                                     key={s.nis}
-                                    value={`${s.name} - ${s.nis}`}
+                                    value={`${s.name} – ${s.nis} – ${s.kelas}`}
                                     onSelect={(currentValue) => {
                                       setFormData({
                                         ...formData,
@@ -558,10 +628,10 @@ const BorrowFlow = () => {
                                     <Check
                                       className={cn(
                                         "mr-2 h-4 w-4",
-                                        formData.nama_peminjam === `${s.name} - ${s.nis}` ? "opacity-100" : "opacity-0"
+                                        formData.nama_peminjam === `${s.name} – ${s.nis} – ${s.kelas}` ? "opacity-100" : "opacity-0"
                                       )}
                                     />
-                                    {`${s.name} - ${s.nis}`}
+                                    {`${s.name} – ${s.nis} – ${s.kelas}`}
                                   </CommandItem>
                                 ))
                             )}
