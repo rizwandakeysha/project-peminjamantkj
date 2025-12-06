@@ -102,14 +102,14 @@ exports.createPeminjaman = async (req, res) => {
     } = req.body;
 
     // Validate required fields
-    if (!id_barang || !nama_peminjam || !keperluan || !guru_pendamping || !jumlah) {
+    if (!id_barang || !nama_peminjam || !keperluan || !jumlah) {
       await client.query('ROLLBACK');
       console.error('Missing required fields:', {
-        id_barang, nama_peminjam, keperluan, guru_pendamping, jumlah
+        id_barang, nama_peminjam, keperluan, jumlah
       });
       return res.status(400).json({
         success: false,
-        message: 'Semua field harus diisi',
+        message: 'Semua field wajib harus diisi (id_barang, nama_peminjam, keperluan, jumlah)',
       });
     }
 
@@ -147,11 +147,15 @@ exports.createPeminjaman = async (req, res) => {
     const kode_peminjaman = generateBorrowingCode();
 
     // Insert peminjaman
+    // Convert empty strings to null for optional fields
+    const guruPendampingValue = (guru_pendamping && guru_pendamping.trim()) ? guru_pendamping.trim() : null;
+    const kontakValue = (kontak && kontak.trim()) ? kontak.trim() : null;
+    
     const result = await client.query(
       `INSERT INTO peminjaman 
        (kode_peminjaman, id_barang, nama_peminjam, kontak, keperluan, guru_pendamping, jumlah, foto_credential) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id_peminjaman`,
-      [kode_peminjaman, id_barang, nama_peminjam, kontak || null, keperluan, guru_pendamping, jumlah, foto_credential || null]
+      [kode_peminjaman, id_barang, nama_peminjam.trim(), kontakValue, keperluan.trim(), guruPendampingValue, jumlah, foto_credential || null]
     );
 
     const newId = result.rows[0].id_peminjaman;

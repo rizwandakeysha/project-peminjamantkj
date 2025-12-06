@@ -57,6 +57,12 @@ export const barangAPI = {
     return result.data || null;
   },
 
+  // Get items by jenis code (for jenis scan)
+  getByJenis: async (kode_jenis: string): Promise<Item[]> => {
+    const result = await fetchAPI<Item[]>(`/barang/jenis/${kode_jenis}`);
+    return result.data || [];
+  },
+
   // Create new item
   create: async (data: Omit<Item, "id" | "created_at">): Promise<Item> => {
     const result = await fetchAPI<Item>("/barang", {
@@ -196,6 +202,48 @@ export const uploadAPI = {
     }
 
     return data.data.url; // Return the URL
+  },
+};
+
+// Guru API
+export const guruAPI = {
+  // Get all teachers
+  getAll: async (): Promise<{ id: number; nip: string; name: string; created_at: string }[]> => {
+    const result = await fetchAPI<{ id: number; nip: string; name: string; created_at: string }[]>("/guru");
+    return result.data || [];
+  },
+
+  // Get teacher by ID
+  getById: async (id: number): Promise<{ id: number; nip: string; name: string; created_at: string } | null> => {
+    const result = await fetchAPI<{ id: number; nip: string; name: string; created_at: string }>(`/guru/${id}`);
+    return result.data || null;
+  },
+
+  // Get teacher by NIP
+  getByNip: async (nip: string): Promise<{ id: number; nip: string; name: string; created_at: string } | null> => {
+    const result = await fetchAPI<{ id: number; nip: string; name: string; created_at: string }>(`/guru/nip/${nip}`);
+    return result.data || null;
+  },
+};
+
+// Siswa API
+export const siswaAPI = {
+  // Get all students
+  getAll: async (): Promise<{ id: number; nis: string; name: string; created_at: string }[]> => {
+    const result = await fetchAPI<{ id: number; nis: string; name: string; created_at: string }[]>("/siswa");
+    return result.data || [];
+  },
+
+  // Get student by ID
+  getById: async (id: number): Promise<{ id: number; nis: string; name: string; created_at: string } | null> => {
+    const result = await fetchAPI<{ id: number; nis: string; name: string; created_at: string }>(`/siswa/${id}`);
+    return result.data || null;
+  },
+
+  // Get student by NIS
+  getByNis: async (nis: string): Promise<{ id: number; nis: string; name: string; created_at: string } | null> => {
+    const result = await fetchAPI<{ id: number; nis: string; name: string; created_at: string }>(`/siswa/nis/${nis}`);
+    return result.data || null;
   },
 };
 

@@ -13,6 +13,8 @@ const barangRoutes = require('./routes/barangRoutes');
 const peminjamanRoutes = require('./routes/peminjamanRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
+const guruRoutes = require('./routes/guruRoutes');
+const siswaRoutes = require('./routes/siswaRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -83,6 +85,8 @@ app.use('/api/barang', barangRoutes);
 app.use('/api/peminjaman', peminjamanRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/guru', guruRoutes);
+app.use('/api/siswa', siswaRoutes);
 
 // ============================================
 // ERROR HANDLERS

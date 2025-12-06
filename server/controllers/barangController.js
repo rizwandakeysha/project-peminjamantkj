@@ -4,7 +4,19 @@ const db = require('../config/database');
 exports.getAllBarang = async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT id_barang as id, kode_barang, nama_barang, jumlah_stok, jumlah_dipinjam, foto_barang, notes, created_at FROM barang ORDER BY created_at DESC'
+      `SELECT 
+        b.id_barang as id, 
+        b.kode_barang, 
+        b.nama_barang, 
+        b.jumlah_stok, 
+        b.jumlah_dipinjam, 
+        b.foto_barang, 
+        b.notes, 
+        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.created_at 
+      FROM barang b
+      LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
+      ORDER BY b.created_at DESC`
     );
     res.json({
       success: true,
@@ -25,7 +37,19 @@ exports.getBarangById = async (req, res) => {
   try {
     const { id } = req.params;
     const result = await db.query(
-      'SELECT id_barang as id, kode_barang, nama_barang, jumlah_stok, jumlah_dipinjam, foto_barang, notes, created_at FROM barang WHERE id_barang = $1',
+      `SELECT 
+        b.id_barang as id, 
+        b.kode_barang, 
+        b.nama_barang, 
+        b.jumlah_stok, 
+        b.jumlah_dipinjam, 
+        b.foto_barang, 
+        b.notes, 
+        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.created_at 
+      FROM barang b
+      LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
+      WHERE b.id_barang = $1`,
       [id]
     );
     
@@ -55,7 +79,19 @@ exports.getBarangByKode = async (req, res) => {
   try {
     const { kode } = req.params;
     const result = await db.query(
-      'SELECT id_barang as id, kode_barang, nama_barang, jumlah_stok, jumlah_dipinjam, foto_barang, notes, created_at FROM barang WHERE kode_barang = $1',
+      `SELECT 
+        b.id_barang as id, 
+        b.kode_barang, 
+        b.nama_barang, 
+        b.jumlah_stok, 
+        b.jumlah_dipinjam, 
+        b.foto_barang, 
+        b.notes, 
+        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.created_at 
+      FROM barang b
+      LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
+      WHERE b.kode_barang = $1`,
       [kode]
     );
     
@@ -80,10 +116,47 @@ exports.getBarangByKode = async (req, res) => {
   }
 };
 
+// Get barang by jenis code (kode_jenis)
+exports.getBarangByJenis = async (req, res) => {
+  try {
+    const { kode_jenis } = req.params;
+    // Query dengan JOIN untuk handle jika kode_jenis NULL, ambil dari jenis_barang
+    const result = await db.query(
+      `SELECT 
+        b.id_barang as id, 
+        b.kode_barang, 
+        b.nama_barang, 
+        b.jumlah_stok, 
+        b.jumlah_dipinjam, 
+        b.foto_barang, 
+        b.notes, 
+        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.created_at 
+      FROM barang b
+      LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
+      WHERE COALESCE(b.kode_jenis, jb.kode_jenis_barang) = $1 
+      ORDER BY b.nama_barang ASC`,
+      [kode_jenis]
+    );
+    
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    console.error('Error getting barang by jenis:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching barang by jenis',
+      error: error.message,
+    });
+  }
+};
+
 // Create new barang
 exports.createBarang = async (req, res) => {
   try {
-    const { kode_barang, nama_barang, jumlah_stok, foto_barang, notes } = req.body;
+    const { kode_barang, nama_barang, jumlah_stok, foto_barang, notes, kode_jenis } = req.body;
 
     if (!kode_barang || !nama_barang || !jumlah_stok) {
       return res.status(400).json({
@@ -93,15 +166,27 @@ exports.createBarang = async (req, res) => {
     }
 
     const result = await db.query(
-      'INSERT INTO barang (kode_barang, nama_barang, jumlah_stok, foto_barang, notes) VALUES ($1, $2, $3, $4, $5) RETURNING id_barang',
-      [kode_barang, nama_barang, jumlah_stok, foto_barang || null, notes || null]
+      'INSERT INTO barang (kode_barang, nama_barang, jumlah_stok, foto_barang, notes, kode_jenis) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_barang',
+      [kode_barang, nama_barang, jumlah_stok, foto_barang || null, notes || null, kode_jenis || null]
     );
 
     const newId = result.rows[0].id_barang;
 
-    // Get the created item with id alias
+    // Get the created item with id alias (include JOIN untuk kode_jenis)
     const newItemResult = await db.query(
-      'SELECT id_barang as id, kode_barang, nama_barang, jumlah_stok, jumlah_dipinjam, foto_barang, notes, created_at FROM barang WHERE id_barang = $1',
+      `SELECT 
+        b.id_barang as id, 
+        b.kode_barang, 
+        b.nama_barang, 
+        b.jumlah_stok, 
+        b.jumlah_dipinjam, 
+        b.foto_barang, 
+        b.notes, 
+        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.created_at 
+      FROM barang b
+      LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
+      WHERE b.id_barang = $1`,
       [newId]
     );
 
@@ -130,11 +215,11 @@ exports.createBarang = async (req, res) => {
 exports.updateBarang = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nama_barang, jumlah_stok, foto_barang, notes } = req.body;
+    const { nama_barang, jumlah_stok, foto_barang, notes, kode_jenis } = req.body;
 
     const result = await db.query(
-      'UPDATE barang SET nama_barang = $1, jumlah_stok = $2, foto_barang = $3, notes = $4 WHERE id_barang = $5',
-      [nama_barang, jumlah_stok, foto_barang || null, notes || null, id]
+      'UPDATE barang SET nama_barang = $1, jumlah_stok = $2, foto_barang = $3, notes = $4, kode_jenis = $5 WHERE id_barang = $6',
+      [nama_barang, jumlah_stok, foto_barang || null, notes || null, kode_jenis || null, id]
     );
 
     if (result.rowCount === 0) {

@@ -9,6 +9,26 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
   ArrowLeft,
   ArrowRight,
   QrCode,
@@ -51,6 +71,11 @@ const BorrowFlow = () => {
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [photoData, setPhotoData] = useState<string>("");
   const [borrowingCode, setBorrowingCode] = useState<string>("");
+  const [openNamaPeminjam, setOpenNamaPeminjam] = useState(false);
+  const [searchNamaPeminjam, setSearchNamaPeminjam] = useState("");
+  const [openRolePicker, setOpenRolePicker] = useState(false);
+  const [openGuruPendamping, setOpenGuruPendamping] = useState(false);
+  const [searchGuruPendamping, setSearchGuruPendamping] = useState("");
 
   // Check camera availability on mount
   useEffect(() => {
@@ -416,54 +441,134 @@ const BorrowFlow = () => {
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="role">Meminjam sebagai *</Label>
-                    <select
-                      id="role"
-                      value={borrowerRole}
-                      onChange={(e) => setBorrowerRole(e.target.value as any)}
-                      className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
-                    >
-                      <option value="guru">Guru</option>
-                      <option value="siswa">Siswa</option>
-                    </select>
+                    <Popover open={openRolePicker} onOpenChange={setOpenRolePicker}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          id="role"
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openRolePicker}
+                          className="mt-1 w-full justify-between"
+                        >
+                          {borrowerRole === "guru" ? "Guru" : "Siswa"}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0">
+                        <Command>
+                          <div className="max-h-44 overflow-y-auto">
+                            <CommandItem
+                              value="guru"
+                              onSelect={(v) => {
+                                setBorrowerRole("guru");
+                                setOpenRolePicker(false);
+                                // clear nama peminjam when role changes
+                                setFormData({ ...formData, nama_peminjam: "", guru_pendamping: "" });
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", borrowerRole === "guru" ? "opacity-100" : "opacity-0")} />
+                              Guru
+                            </CommandItem>
+                            <CommandItem
+                              value="siswa"
+                              onSelect={(v) => {
+                                setBorrowerRole("siswa");
+                                setOpenRolePicker(false);
+                                setFormData({ ...formData, nama_peminjam: "", guru_pendamping: "" });
+                              }}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", borrowerRole === "siswa" ? "opacity-100" : "opacity-0")} />
+                              Siswa
+                            </CommandItem>
+                          </div>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
 
                   <div>
                     <Label htmlFor="nama">Nama Peminjam *</Label>
-                    {borrowerRole === "guru" ? (
-                      <select
-                        id="nama"
-                        value={formData.nama_peminjam}
-                        onChange={(e) =>
-                          setFormData({ ...formData, nama_peminjam: e.target.value })
-                        }
-                        className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
-                        required
-                      >
-                        <option value="">Pilih Guru</option>
-                        {mockTeachers.map((t) => (
-                          <option key={t.nip} value={`${t.name} - ${t.nip}`}>
-                            {`${t.name} - ${t.nip}`}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <select
-                        id="nama"
-                        value={formData.nama_peminjam}
-                        onChange={(e) =>
-                          setFormData({ ...formData, nama_peminjam: e.target.value })
-                        }
-                        className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
-                        required
-                      >
-                        <option value="">Pilih Siswa</option>
-                        {mockStudents.map((s) => (
-                          <option key={s.nis} value={`${s.name} - ${s.nis}`}>
-                            {`${s.name} - ${s.nis}`}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                    <Popover open={openNamaPeminjam} onOpenChange={setOpenNamaPeminjam}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          id="nama"
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openNamaPeminjam}
+                          className="mt-1 w-full justify-between"
+                        >
+                          {formData.nama_peminjam || (borrowerRole === "guru" ? "Pilih Guru..." : "Pilih Siswa...")}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0">
+                        <Command>
+                          <CommandInput
+                            placeholder={borrowerRole === "guru" ? "Cari guru..." : "Cari siswa..."}
+                            value={searchNamaPeminjam}
+                            onValueChange={setSearchNamaPeminjam}
+                          />
+                          <CommandEmpty>Tidak ada data ditemukan</CommandEmpty>
+                          <div className="max-h-64 overflow-y-auto">
+                            {borrowerRole === "guru" ? (
+                              mockTeachers
+                                .filter((t) =>
+                                  `${t.name} - ${t.nip}`.toLowerCase().includes(searchNamaPeminjam.toLowerCase())
+                                )
+                                .map((t) => (
+                                  <CommandItem
+                                    key={t.nip}
+                                    value={`${t.name} - ${t.nip}`}
+                                    onSelect={(currentValue) => {
+                                      setFormData({
+                                        ...formData,
+                                        nama_peminjam: currentValue === formData.nama_peminjam ? "" : currentValue,
+                                      });
+                                      setOpenNamaPeminjam(false);
+                                      setSearchNamaPeminjam("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        formData.nama_peminjam === `${t.name} - ${t.nip}` ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {`${t.name} - ${t.nip}`}
+                                  </CommandItem>
+                                ))
+                            ) : (
+                              mockStudents
+                                .filter((s) =>
+                                  `${s.name} - ${s.nis}`.toLowerCase().includes(searchNamaPeminjam.toLowerCase())
+                                )
+                                .map((s) => (
+                                  <CommandItem
+                                    key={s.nis}
+                                    value={`${s.name} - ${s.nis}`}
+                                    onSelect={(currentValue) => {
+                                      setFormData({
+                                        ...formData,
+                                        nama_peminjam: currentValue === formData.nama_peminjam ? "" : currentValue,
+                                      });
+                                      setOpenNamaPeminjam(false);
+                                      setSearchNamaPeminjam("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        formData.nama_peminjam === `${s.name} - ${s.nis}` ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {`${s.name} - ${s.nis}`}
+                                  </CommandItem>
+                                ))
+                            )}
+                          </div>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div>
                     <Label htmlFor="kontak">Nomor Kontak (WA) *</Label>
@@ -497,20 +602,58 @@ const BorrowFlow = () => {
                   {borrowerRole === "siswa" && (
                     <div>
                       <Label htmlFor="guru">Guru Pendamping *</Label>
-                      <select
-                        id="guru"
-                        value={formData.guru_pendamping}
-                        onChange={(e) =>
-                          setFormData({ ...formData, guru_pendamping: e.target.value })
-                        }
-                        className="mt-1 w-full rounded-md border px-3 py-2 bg-background"
-                        required
-                      >
-                        <option value="">Pilih Guru</option>
-                        <option value="Guru A">Pak Andi Bayu, S.Pd.</option>
-                        <option value="Guru B">Bu Ira Rosmalina, M.Pd.</option>
-                        <option value="Guru C">Guru C</option>
-                      </select>
+                      <Popover open={openGuruPendamping} onOpenChange={setOpenGuruPendamping}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            id="guru"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openGuruPendamping}
+                            className="mt-1 w-full justify-between"
+                          >
+                            {formData.guru_pendamping || "Pilih Guru..."}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput
+                              placeholder="Cari guru pendamping..."
+                              value={searchGuruPendamping}
+                              onValueChange={setSearchGuruPendamping}
+                            />
+                            <CommandEmpty>Tidak ada guru ditemukan</CommandEmpty>
+                            <div className="max-h-64 overflow-y-auto">
+                              {mockTeachers
+                                .filter((t) =>
+                                  `${t.name} - ${t.nip}`.toLowerCase().includes(searchGuruPendamping.toLowerCase())
+                                )
+                                .map((t) => (
+                                  <CommandItem
+                                    key={t.nip}
+                                    value={`${t.name} - ${t.nip}`}
+                                    onSelect={(currentValue) => {
+                                      setFormData({
+                                        ...formData,
+                                        guru_pendamping: currentValue === formData.guru_pendamping ? "" : currentValue,
+                                      });
+                                      setOpenGuruPendamping(false);
+                                      setSearchGuruPendamping("");
+                                    }}
+                                  >
+                                    <Check
+                                      className={cn(
+                                        "mr-2 h-4 w-4",
+                                        formData.guru_pendamping === `${t.name} - ${t.nip}` ? "opacity-100" : "opacity-0"
+                                      )}
+                                    />
+                                    {`${t.name} - ${t.nip}`}
+                                  </CommandItem>
+                                ))}
+                            </div>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   )}
 

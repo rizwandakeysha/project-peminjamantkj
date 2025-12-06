@@ -5,11 +5,14 @@ const barangController = require('../controllers/barangController');
 // GET all barang
 router.get('/', barangController.getAllBarang);
 
+// GET barang by kode (must be before /:id route)
+router.get('/kode/:kode', barangController.getBarangByKode);
+
+// GET barang by jenis code (must be before /:id route)
+router.get('/jenis/:kode_jenis', barangController.getBarangByJenis);
+
 // GET barang by ID
 router.get('/:id', barangController.getBarangById);
-
-// GET barang by kode
-router.get('/kode/:kode', barangController.getBarangByKode);
 
 // POST create new barang
 router.post('/', barangController.createBarang);
