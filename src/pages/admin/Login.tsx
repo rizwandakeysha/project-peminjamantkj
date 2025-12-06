@@ -7,29 +7,36 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Lock, LogIn } from "lucide-react";
-import { adminAPI } from "@/lib/api";
 import { setAdminToken } from "@/lib/auth";
+import { toast } from "react-hot-toast";
 
 const AdminLogin = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
+
     try {
-      const { token } = await adminAPI.login(username.trim(), password);
-      setAdminToken(token);
-      const redirectTo =
-        (location.state as any)?.from || "/admin-tkj/dashboard";
-      navigate(redirectTo, { replace: true });
+      // DUMMY MODE: Accept any username & password
+      if (username.trim() && password.trim()) {
+        // Generate dummy token
+        const dummyToken = `dummy-token-${Date.now()}`;
+        setAdminToken(dummyToken);
+        toast.success("Login berhasil! (Dummy Mode)");
+
+        const redirectTo =
+          (location.state as any)?.from || "/admin-tkj/dashboard";
+        navigate(redirectTo, { replace: true });
+      } else {
+        toast.error("Username dan password harus diisi");
+      }
     } catch (err: any) {
-      setError(err?.message || "Login gagal");
+      toast.error("Terjadi kesalahan");
     } finally {
       setLoading(false);
     }
@@ -46,18 +53,12 @@ const AdminLogin = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
+                  placeholder="Masukkan username apapun"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
@@ -68,6 +69,7 @@ const AdminLogin = () => {
                 <Input
                   id="password"
                   type="password"
+                  placeholder="Masukkan password apapun"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -78,6 +80,14 @@ const AdminLogin = () => {
                 {loading ? "Masuk..." : "Masuk"}
               </Button>
             </form>
+
+            {/* Dummy Mode Info */}
+            <Alert className="mt-4 bg-blue-50 border-blue-200">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-900 text-xs">
+                <strong>Mode Demo:</strong> Terima semua username & password (untuk testing)
+              </AlertDescription>
+            </Alert>
           </CardContent>
         </Card>
       </div>

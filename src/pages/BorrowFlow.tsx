@@ -42,7 +42,6 @@ import { mockItems, mockTeachers, mockStudents, kelasOptions } from "@/lib/mockD
 // Removed client-side code generation; server is source of truth
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { barangAPI, peminjamanAPI } from "@/lib/api";
 
 type Step = "scan" | "form" | "photo" | "summary";
 
@@ -134,24 +133,27 @@ const BorrowFlow = () => {
         return;
       }
 
-      // Otherwise, fallback to fetching single barang by kode
-      const item = await barangAPI.getByKode(decodedText);
-      if (item) {
-        const available = item.jumlah_stok - item.jumlah_dipinjam;
+      // DUMMY MODE: Check mockItems for individual item kode match instead of API call
+      const matchedItem = mockItems.find(
+        (i) => i.kode_barang === decodedText || i.kode_barang.includes(decodedText)
+      );
+      
+      if (matchedItem) {
+        const available = matchedItem.jumlah_stok - matchedItem.jumlah_dipinjam;
         if (available > 0) {
-          setSelectedItem(item);
-          setFormData((prev) => ({ ...prev, id_barang: item.id }));
-          setSelectedJenisCode(item.kode_jenis || null);
+          setSelectedItem(matchedItem);
+          setFormData((prev) => ({ ...prev, id_barang: matchedItem.id }));
+          setSelectedJenisCode(matchedItem.kode_jenis || null);
           setCurrentStep("form");
         } else {
           toast.error("Maaf, barang tidak tersedia saat ini");
         }
       } else {
-        toast.error("QR Code tidak valid atau barang tidak ditemukan");
+        toast.error("QR Code tidak valid atau barang tidak ditemukan (Dummy Mode)");
       }
     } catch (error) {
-      console.error("Error fetching item:", error);
-      toast.error("Gagal memuat data barang");
+      console.error("Error in QR scan:", error);
+      toast.error("Gagal memproses QR Code");
     }
   };
 
@@ -223,42 +225,16 @@ const BorrowFlow = () => {
     }
 
     try {
-      const createdCodes: string[] = [];
-
-      if (availableItems.length > 0) {
-        // Create one borrowing per selected individual item (jumlah = 1)
-        for (const id of itemIdsToBorrow) {
-          const result = await peminjamanAPI.create({
-            id_barang: Number(id),
-            nama_peminjam: formData.nama_peminjam.trim(),
-            kontak: formData.kontak?.trim() || null,
-            keperluan: formData.keperluan.trim(),
-            guru_pendamping: formData.guru_pendamping.trim(),
-            jumlah: 1,
-            foto_credential: imageData || null,
-          });
-          if (result && result.kode_peminjaman) createdCodes.push(result.kode_peminjaman);
-        }
-      } else {
-        // Single item, possibly multiple jumlah
-        const result = await peminjamanAPI.create({
-          id_barang: Number(selectedItem!.id),
-          nama_peminjam: formData.nama_peminjam.trim(),
-          kontak: formData.kontak?.trim() || null,
-          keperluan: formData.keperluan.trim(),
-          guru_pendamping: formData.guru_pendamping.trim(),
-          jumlah: Number(formData.jumlah),
-          foto_credential: imageData || null,
-        });
-        if (result && result.kode_peminjaman) createdCodes.push(result.kode_peminjaman);
-      }
-
-      setBorrowingCode(createdCodes.join(", ") || "");
+      // DUMMY MODE: Skip API calls and generate single code for all items
+      // When backend is ready, this will call API and return single code with multiple detail records
+      const dummyCode = `PMJ-${Date.now()}`;
+      
+      setBorrowingCode(dummyCode);
       setCurrentStep("summary");
-      toast.success("Peminjaman berhasil dibuat!");
+      toast.success("Peminjaman berhasil dibuat! (Dummy Mode)");
     } catch (error) {
-      console.error("Error creating borrowing:", error);
-      toast.error("Gagal menyimpan data peminjaman");
+      console.error("Error in dummy borrowing:", error);
+      toast.error("Gagal memproses peminjaman");
     }
   };
 
@@ -808,12 +784,9 @@ const BorrowFlow = () => {
                 <div className="inline-flex items-center justify-center w-16 h-16 bg-success/10 text-success rounded-full mb-4">
                   <CheckCircle className="h-8 w-8" />
                 </div>
-                <CardTitle className="text-2xl mb-2">
+                <CardTitle className="text-4xl font-extrabold">
                   Peminjaman Berhasil!
                 </CardTitle>
-                <p className="text-muted-foreground">
-                  Pemberitahuan: kode peminjaman di bawah hanya sebagai penanda. Tidak perlu disimpan untuk proses pengembalian.
-                </p>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -836,33 +809,10 @@ const BorrowFlow = () => {
                 </Alert>
               </div>
 
-              {/* Details */}
+              {/* Peminjam Info */}
               <div className="space-y-3">
-                <h4 className="font-semibold">Detail Peminjaman:</h4>
+                <h4 className="font-semibold">Data Peminjam:</h4>
                 <div className="grid gap-2 text-sm">
-                  {availableItems.length > 0 ? (
-                    <div className="space-y-2">
-                      <span className="text-muted-foreground">Barang dipilih:</span>
-                      <div className="text-sm space-y-1">
-                        {availableItems
-                          .filter((it) => selectedItemIds.includes(it.id))
-                          .map((it) => (
-                            <div key={it.id} className="font-medium">{it.nama_barang} — {it.kode_barang}</div>
-                          ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Barang:</span>
-                        <span className="font-medium">{selectedItem?.nama_barang}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Jumlah:</span>
-                        <span className="font-medium">{formData.jumlah}</span>
-                      </div>
-                    </>
-                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Peminjam:</span>
                     <span className="font-medium">
@@ -877,14 +827,54 @@ const BorrowFlow = () => {
                     <span className="text-muted-foreground">Keperluan:</span>
                     <span className="font-medium">{formData.keperluan}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      Guru Pendamping:
-                    </span>
-                    <span className="font-medium">
-                      {formData.guru_pendamping}
-                    </span>
-                  </div>
+                  {formData.guru_pendamping && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Guru Pendamping:
+                      </span>
+                      <span className="font-medium">
+                        {formData.guru_pendamping}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Borrowing Details Table */}
+              <div className="space-y-3">
+                <h4 className="font-semibold">Detail Barang Dipinjam:</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="border-b-2 border-gray-300">
+                        <th className="text-left py-2 px-2 font-semibold">No</th>
+                        <th className="text-left py-2 px-2 font-semibold">Nama Barang</th>
+                        <th className="text-left py-2 px-2 font-semibold">Kode</th>
+                        <th className="text-center py-2 px-2 font-semibold">Jumlah</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {availableItems.length > 0 ? (
+                        availableItems
+                          .filter((it) => selectedItemIds.includes(it.id))
+                          .map((it, index) => (
+                            <tr key={it.id} className="border-b border-gray-200 hover:bg-gray-50">
+                              <td className="py-2 px-2">{index + 1}</td>
+                              <td className="py-2 px-2 font-medium">{it.nama_barang}</td>
+                              <td className="py-2 px-2 text-gray-600">{it.kode_barang}</td>
+                              <td className="py-2 px-2 text-center font-medium">1</td>
+                            </tr>
+                          ))
+                      ) : (
+                        <tr className="border-b border-gray-200 hover:bg-gray-50">
+                          <td className="py-2 px-2">1</td>
+                          <td className="py-2 px-2 font-medium">{selectedItem?.nama_barang}</td>
+                          <td className="py-2 px-2 text-gray-600">{selectedItem?.kode_barang}</td>
+                          <td className="py-2 px-2 text-center font-medium">{formData.jumlah}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
