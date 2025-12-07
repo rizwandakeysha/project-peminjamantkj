@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/popover";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatStudentDisplay, formatTeacherDisplay } from "@/lib/formatters";
+import BorrowerLabel from "@/components/BorrowerLabel";
 import {
   ArrowLeft,
   ArrowRight,
@@ -542,7 +544,11 @@ const BorrowFlow = () => {
                           aria-expanded={openNamaPeminjam}
                           className="mt-1 w-full justify-between"
                         >
-                          {formData.nama_peminjam || (borrowerRole === "guru" ? "Pilih Guru..." : "Pilih Siswa...")}
+                          {formData.nama_peminjam ? (
+                            <BorrowerLabel label={formData.nama_peminjam} role={borrowerRole} />
+                          ) : (
+                            (borrowerRole === "guru" ? "Pilih Guru..." : "Pilih Siswa...")
+                          )}
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </PopoverTrigger>
@@ -558,12 +564,12 @@ const BorrowFlow = () => {
                             {borrowerRole === "guru" ? (
                               mockTeachers
                                 .filter((t) =>
-                                  `${t.name} - ${t.nip}`.toLowerCase().includes(searchNamaPeminjam.toLowerCase())
+                                  formatTeacherDisplay(t).toLowerCase().includes(searchNamaPeminjam.toLowerCase())
                                 )
                                 .map((t) => (
                                   <CommandItem
                                     key={t.nip}
-                                    value={`${t.name} - ${t.nip}`}
+                                    value={formatTeacherDisplay(t)}
                                     onSelect={(currentValue) => {
                                       setFormData({
                                         ...formData,
@@ -576,22 +582,22 @@ const BorrowFlow = () => {
                                     <Check
                                       className={cn(
                                         "mr-2 h-4 w-4",
-                                        formData.nama_peminjam === `${t.name} - ${t.nip}` ? "opacity-100" : "opacity-0"
+                                        formData.nama_peminjam === formatTeacherDisplay(t) ? "opacity-100" : "opacity-0"
                                       )}
                                     />
-                                    {`${t.name} - ${t.nip}`}
+                                    <BorrowerLabel label={formatTeacherDisplay(t)} role="guru" />
                                   </CommandItem>
                                 ))
                             ) : (
                               mockStudents
                                 .filter((s) =>
                                   (selectedKelas === "" || s.kelas === selectedKelas) &&
-                                  `${s.name} – ${s.nis} – ${s.kelas}`.toLowerCase().includes(searchNamaPeminjam.toLowerCase())
+                                  formatStudentDisplay(s).toLowerCase().includes(searchNamaPeminjam.toLowerCase())
                                 )
                                 .map((s) => (
                                   <CommandItem
                                     key={s.nis}
-                                    value={`${s.name} – ${s.nis} – ${s.kelas}`}
+                                    value={formatStudentDisplay(s)}
                                     onSelect={(currentValue) => {
                                       setFormData({
                                         ...formData,
@@ -604,10 +610,10 @@ const BorrowFlow = () => {
                                     <Check
                                       className={cn(
                                         "mr-2 h-4 w-4",
-                                        formData.nama_peminjam === `${s.name} – ${s.nis} – ${s.kelas}` ? "opacity-100" : "opacity-0"
+                                        formData.nama_peminjam === formatStudentDisplay(s) ? "opacity-100" : "opacity-0"
                                       )}
                                     />
-                                    {`${s.name} – ${s.nis} – ${s.kelas}`}
+                                    <BorrowerLabel label={formatStudentDisplay(s)} role="siswa" />
                                   </CommandItem>
                                 ))
                             )}
@@ -657,7 +663,11 @@ const BorrowFlow = () => {
                             aria-expanded={openGuruPendamping}
                             className="mt-1 w-full justify-between"
                           >
-                            {formData.guru_pendamping || "Pilih Guru..."}
+                            {formData.guru_pendamping ? (
+                              <BorrowerLabel label={formData.guru_pendamping} role="guru" />
+                            ) : (
+                              "Pilih Guru..."
+                            )}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
@@ -672,12 +682,12 @@ const BorrowFlow = () => {
                             <div className="max-h-64 overflow-y-auto">
                               {mockTeachers
                                 .filter((t) =>
-                                  `${t.name} - ${t.nip}`.toLowerCase().includes(searchGuruPendamping.toLowerCase())
+                                  formatTeacherDisplay(t).toLowerCase().includes(searchGuruPendamping.toLowerCase())
                                 )
                                 .map((t) => (
                                   <CommandItem
                                     key={t.nip}
-                                    value={`${t.name} - ${t.nip}`}
+                                    value={formatTeacherDisplay(t)}
                                     onSelect={(currentValue) => {
                                       setFormData({
                                         ...formData,
@@ -690,10 +700,10 @@ const BorrowFlow = () => {
                                     <Check
                                       className={cn(
                                         "mr-2 h-4 w-4",
-                                        formData.guru_pendamping === `${t.name} - ${t.nip}` ? "opacity-100" : "opacity-0"
+                                        formData.guru_pendamping === formatTeacherDisplay(t) ? "opacity-100" : "opacity-0"
                                       )}
                                     />
-                                    {`${t.name} - ${t.nip}`}
+                                    <BorrowerLabel label={formatTeacherDisplay(t)} role="guru" />
                                   </CommandItem>
                                 ))}
                             </div>

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, CheckCircle, AlertCircle, Barcode } from "lucide-react";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Item } from "@/types";
 import { mockItems } from "@/lib/mockData";
 import { toast } from "react-hot-toast";
@@ -17,6 +18,13 @@ type Step = "scan" | "verify" | "complete";
 const ReturnFlow = () => {
   const navigate = useNavigate();
   const scanInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [webcamEnabled, setWebcamEnabled] = useState(false);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const currentStreamRef = useRef<MediaStream | null>(null);
+  const html5QrRef = useRef<Html5Qrcode | null>(null);
+  const [scannerActive, setScannerActive] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>("scan");
   const [scannedBarcode, setScannedBarcode] = useState("");
   const [foundItem, setFoundItem] = useState<Item | null>(null);
@@ -28,6 +36,144 @@ const ReturnFlow = () => {
       scanInputRef.current.focus();
     }
   }, []);
+
+  // enumerate cameras on mount
+  useEffect(() => {
+    const list = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter((d) => d.kind === "videoinput");
+        setCameras(cams);
+        if (cams.length > 0 && !selectedCameraId) {
+          setSelectedCameraId(cams[0].deviceId);
+        }
+      } catch (e) {
+        console.warn("enumerateDevices failed", e);
+      }
+    };
+    list();
+  }, [selectedCameraId]);
+
+  // request camera permission (prompts the user) and re-enumerate devices
+  const requestCameraPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // stop immediately (we just wanted permission)
+      stream.getTracks().forEach((t) => t.stop());
+      // re-enumerate devices so labels appear
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cams = devices.filter((d) => d.kind === "videoinput");
+      setCameras(cams);
+      if (cams.length > 0) setSelectedCameraId(cams[0].deviceId);
+      return true;
+    } catch (err) {
+      console.error("Camera permission denied or error:", err);
+      toast.error("Izin kamera ditolak atau tidak tersedia");
+      return false;
+    }
+  };
+
+  const startWebcam = async (deviceId?: string) => {
+    // Prefer using html5-qrcode for live decoding when available
+    try {
+      const readerId = "qr-reader";
+      // ensure the reader container is rendered before constructing the Html5Qrcode instance
+      setScannerActive(true);
+      await new Promise((r) => setTimeout(r, 150));
+      if (!html5QrRef.current) {
+        html5QrRef.current = new Html5Qrcode(readerId);
+      }
+
+      const config = { fps: 10, formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128] } as any;
+
+      await html5QrRef.current.start(
+        { deviceId: deviceId ? { exact: deviceId } : undefined } as any,
+        config,
+        (decodedText) => {
+          // a barcode was detected
+          const code = String(decodedText).trim();
+          // try to find the item immediately, but DO NOT mutate or change global status here
+          const item = mockItems.find((i) => i.kode_barang.toLowerCase() === code.toLowerCase());
+          if (item) {
+            // advance directly to verification with the detected item
+            setFoundItem(item);
+            setCurrentStep("verify");
+            toast.success(`Barcode terdeteksi: ${item.nama_barang} (${item.kode_barang})`);
+            // stop and clear scanner
+            try {
+              html5QrRef.current?.stop().then(() => {
+                html5QrRef.current?.clear();
+                html5QrRef.current = null;
+                setScannerActive(false);
+                setWebcamEnabled(false);
+              });
+            } catch (e) {
+              console.warn("Error stopping html5-qrcode", e);
+            }
+          } else {
+            // not found — keep scanning but let user know
+            toast.error("Barcode tidak dikenali. Arahkan kamera lagi atau coba manual.");
+          }
+        },
+        (errorMsg) => {
+          // scanning failure or intermediate errors
+        }
+      );
+
+      setWebcamEnabled(true);
+    } catch (err) {
+      console.error("Failed to start webcam/scanner:", err);
+      toast.error("Gagal mengaktifkan webcam atau scanner");
+      // fallback: try starting a raw MediaStream so snapshot still works
+      try {
+        const constraints: MediaStreamConstraints = {
+          video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" },
+          audio: false,
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        currentStreamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        setWebcamEnabled(true);
+      } catch (e) {
+        console.error("Fallback webcam start failed:", e);
+      }
+    }
+  };
+
+  const stopWebcam = () => {
+    try {
+      // stop html5-qrcode if active
+      if (html5QrRef.current) {
+        try {
+          html5QrRef.current.stop().then(() => {
+            html5QrRef.current?.clear();
+            html5QrRef.current = null;
+          });
+        } catch (e) {
+          console.warn("Error stopping html5-qrcode:", e);
+          html5QrRef.current = null;
+        }
+      }
+
+      const s = currentStreamRef.current;
+      if (s) {
+        s.getTracks().forEach((t) => t.stop());
+        currentStreamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+      }
+    } finally {
+      setScannerActive(false);
+      setWebcamEnabled(false);
+    }
+  };
+
+  // snapshots removed: preview only
 
   const handleScanBarcode = () => {
     if (!scannedBarcode.trim()) {
@@ -164,6 +310,55 @@ const ReturnFlow = () => {
                   >
                     Bersihkan
                   </Button>
+                </div>
+
+                {/* Webcam preview (external webcam) */}
+                <div className="pt-4 border-t">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium">Gunakan Webcam (preview)</p>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={selectedCameraId ?? ""}
+                        onChange={(e) => setSelectedCameraId(e.target.value)}
+                        className="text-sm p-1 border rounded"
+                      >
+                        {cameras.map((c) => (
+                          <option key={c.deviceId} value={c.deviceId}>{c.label || c.deviceId}</option>
+                        ))}
+                      </select>
+                      {!webcamEnabled ? (
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            // ensure permission is requested first so device labels become available
+                            const granted = await requestCameraPermission();
+                            if (granted) {
+                              startWebcam(selectedCameraId ?? undefined);
+                            }
+                          }}
+                        >
+                          Start Webcam
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="destructive" onClick={stopWebcam}>Stop Webcam</Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="border rounded p-2">
+                    {scannerActive ? (
+                      <div id="qr-reader" className="w-full h-80 bg-black" />
+                    ) : (
+                      <video ref={videoRef} className="w-full h-80 bg-black object-cover" playsInline muted />
+                    )}
+                    <div className="flex gap-2 mt-2">
+                      <Button size="sm" variant="outline" onClick={() => {
+                        stopWebcam();
+                        // ensure focus back to input
+                        if (scanInputRef.current) scanInputRef.current.focus();
+                      }}>Close</Button>
+                    </div>
+                  </div>
                 </div>
               </div>
 

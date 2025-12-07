@@ -1,246 +1,203 @@
-import { useState, useEffect } from "react";
+﻿import { useState } from "react";
 import AdminLayout from "@/layouts/AdminLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import {
-  Plus,
-  Edit,
-  Trash2,
-  Download,
-  QrCode,
-  Search,
-  Package,
-} from "lucide-react";
-import { Item } from "@/types";
-import { exportItemLabelPNG } from "@/lib/qrUtils";
-import { createLabelDataURL, downloadLabelPNG } from "@/lib/labelRenderer";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Package, Edit2, Trash2, Eye, Plus, QrCode, Barcode } from "lucide-react";
+import { mockJenisBarang, mockBarang } from "@/lib/mockData";
+import { createSimpleLabelDataURL, downloadSimpleLabelPNG } from "@/lib/qrUtils";
+import { createBarcodeDataURL, downloadBarcodePNG } from "@/lib/barcodeUtils";
 import { toast } from "react-hot-toast";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { barangAPI, uploadAPI } from "@/lib/api";
 
 const Items = () => {
-  const [items, setItems] = useState<Item[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<Item | null>(null);
-  const [qrCodeData, setQrCodeData] = useState<string>("");
-  const [qrDialogOpen, setQrDialogOpen] = useState(false);
-  const [currentQrCode, setCurrentQrCode] = useState("");
-  const [currentItemName, setCurrentItemName] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<number | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [jenisBarangList, setJenisBarangList] = useState(mockJenisBarang);
+  const [barangList, setBarangList] = useState(mockBarang);
+  
+  // Dialog states
+  const [selectedJenisId, setSelectedJenisId] = useState<number | null>(null);
+  const [showBarangDialog, setShowBarangDialog] = useState(false);
+  const [showAddJenisDialog, setShowAddJenisDialog] = useState(false);
+  const [showAddBarangDialog, setShowAddBarangDialog] = useState(false);
+  const [editingBarang, setEditingBarang] = useState<any | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'jenis' | 'barang'; id: number } | null>(null);
+  const [qrDialogOpenForJenis, setQrDialogOpenForJenis] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrLabelName, setQrLabelName] = useState<string>("");
+  const [qrJenisKode, setQrJenisKode] = useState<string>("");
+  const [qrJenisNama, setQrJenisNama] = useState<string>("");
+  // barcode dialog states for barang
+  const [barcodeDialogOpen, setBarcodeDialogOpen] = useState(false);
+  const [barcodeDataUrl, setBarcodeDataUrl] = useState<string | null>(null);
+  const [barcodeKode, setBarcodeKode] = useState<string>("");
+  const [barcodeNama, setBarcodeNama] = useState<string>("");
+  
+  // Form states
+  const [jenisFormData, setJenisFormData] = useState({
+    nama_jenis_barang: '',
+    deskripsi_jenis_barang: '',
+  });
 
-  useEffect(() => {
-    const fetchItems = async () => {
-      try {
-        setLoading(true);
-        const data = await barangAPI.getAll();
-        setItems(data);
-      } catch (error) {
-        console.error("Error fetching items:", error);
-        toast.error("Gagal memuat data barang");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const [barangFormData, setBarangFormData] = useState({
+    nama_barang: '',
+    kode_barang: '',
+    no_serial_number: '',
+    deskripsi_barang: '',
+    status: 'Tersedia',
+    foto_barang: '',
+  });
 
-    fetchItems();
-  }, []);
-
-  const filteredItems = items.filter(
-    (item) =>
-      item.nama_barang.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.kode_barang.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const handleAddItem = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-
-    // Generate kode_barang in format TKJ-XXXX where XXXX is a 4-char
-    // abbreviation derived from the item name. Ensure uniqueness by
-    // appending a numeric suffix if needed.
-    const name = String(formData.get("nama") || "").trim();
-
-    const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-
-    const makeAbbrev = (raw: string) => {
-      if (!raw) return "XXXX";
-      const words = raw
-        .split(/[^a-zA-Z0-9]+/)
-        .map((w) => w.trim())
-        .filter(Boolean);
-
-      let abbrev = "";
-      // take first letters of up to 4 words
-      if (words.length > 0) {
-        for (let i = 0; i < Math.min(4, words.length); i++) {
-          abbrev += words[i][0] || "";
-        }
-      }
-
-      // if still less than 4 chars, append letters from the sanitized name
-      const pool = sanitize(raw);
-      let idx = 0;
-      while (abbrev.length < 4 && idx < pool.length) {
-        const ch = pool[idx];
-        if (!abbrev.includes(ch)) abbrev += ch;
-        idx++;
-      }
-
-      // ensure exactly 4 chars
-      abbrev = (abbrev + "XXXX").slice(0, 4);
-      return abbrev;
-    };
-
-    const base = makeAbbrev(name);
-    const existing = new Set(items.map((it) => it.kode_barang));
-    let newCode = `TKJ-${base}`;
-    let suffix = 1;
-    while (existing.has(newCode)) {
-      newCode = `TKJ-${base}-${suffix}`;
-      suffix++;
-    }
-
-    try {
-      setUploading(true);
-
-      // Upload image if provided
-      let fotoUrl: string | undefined = undefined;
-      const fotoFile = (formData.get("foto") as File) || null;
-      if (fotoFile && fotoFile.size > 0) {
-        fotoUrl = await uploadAPI.uploadImage(fotoFile);
-      }
-
-      const newItem = await barangAPI.create({
-        kode_barang: newCode,
-        nama_barang: formData.get("nama") as string,
-        jumlah_stok: parseInt(formData.get("stok") as string),
-        jumlah_dipinjam: 0,
-        foto_barang: fotoUrl,
-        notes: (formData.get("notes") as string) || undefined,
-      });
-
-      setItems([...items, newItem]);
-      setIsAddDialogOpen(false);
-
-    // Generate and show composed label (quick preview)
-    const labelData = await createLabelDataURL(newCode, newItem.nama_barang);
-    setQrCodeData(labelData);
-    setCurrentQrCode(newCode);
-    setCurrentItemName(newItem.nama_barang);
-    setQrDialogOpen(true);
-
-      toast.success("Barang berhasil ditambahkan!");
-    } catch (error) {
-      console.error("Error creating item:", error);
-      toast.error("Gagal menambahkan barang");
-    } finally {
-      setUploading(false);
-    }
+  // Get barang for selected jenis
+  const getBarangForJenis = (jenisId: number) => {
+    return barangList.filter(b => b.id_jenis_barang === jenisId);
   };
 
-  const handleEditItem = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!editingItem) return;
+  // Get jenis name
+  const getJenisName = (jenisId: number) => {
+    return jenisBarangList.find(j => j.id_jenis_barang === jenisId)?.nama_jenis_barang || '';
+  };
 
-    const formData = new FormData(e.currentTarget);
+  // ===== JENIS BARANG HANDLERS =====
+  const handleEditJenis = (jenis: any) => {
+    setJenisFormData({
+      nama_jenis_barang: jenis.nama_jenis_barang,
+      deskripsi_jenis_barang: jenis.deskripsi_jenis_barang || '',
+    });
+    setSelectedJenisId(jenis.id_jenis_barang);
+    setShowAddJenisDialog(true);
+  };
 
-    try {
-      setUploading(true);
+  const handleSaveJenis = () => {
+    if (!jenisFormData.nama_jenis_barang.trim()) {
+      toast.error("Nama jenis barang tidak boleh kosong");
+      return;
+    }
 
-      // Upload new image if provided, otherwise keep existing
-      let fotoUrl: string | undefined = editingItem.foto_barang;
-      const fotoFile = (formData.get("foto") as File) || null;
-      if (fotoFile && fotoFile.size > 0) {
-        fotoUrl = await uploadAPI.uploadImage(fotoFile);
-      }
+    if (selectedJenisId) {
+      // Update
+      setJenisBarangList(
+        jenisBarangList.map(j =>
+          j.id_jenis_barang === selectedJenisId
+            ? { ...j, ...jenisFormData }
+            : j
+        )
+      );
+      toast.success("Jenis barang berhasil diupdate!");
+    } else {
+      // Create
+      const newJenis = {
+        id_jenis_barang: Math.max(...jenisBarangList.map(j => j.id_jenis_barang), 0) + 1,
+        kode_jenis_barang: `TKJ-${Date.now().toString().slice(-4)}`,
+        nama_jenis_barang: jenisFormData.nama_jenis_barang,
+        deskripsi_jenis_barang: jenisFormData.deskripsi_jenis_barang,
+        created_at: new Date().toISOString(),
+      };
+      setJenisBarangList([...jenisBarangList, newJenis]);
+      toast.success("Jenis barang berhasil ditambahkan!");
+    }
 
-      await barangAPI.update(editingItem.id, {
-        nama_barang: formData.get("nama") as string,
-        jumlah_stok: parseInt(formData.get("stok") as string),
-        foto_barang: fotoUrl,
-        notes: (formData.get("notes") as string) || undefined,
-      });
+    setShowAddJenisDialog(false);
+    setJenisFormData({ nama_jenis_barang: '', deskripsi_jenis_barang: '' });
+    setSelectedJenisId(null);
+  };
 
-      // Refresh items from server
-      const updatedItems = await barangAPI.getAll();
-      setItems(updatedItems);
-      setIsEditDialogOpen(false);
-      setEditingItem(null);
+  const handleDeleteJenis = (jenisId: number) => {
+    setJenisBarangList(jenisBarangList.filter(j => j.id_jenis_barang !== jenisId));
+    setBarangList(barangList.filter(b => b.id_jenis_barang !== jenisId));
+    toast.success("Jenis barang berhasil dihapus!");
+    setDeleteTarget(null);
+  };
+
+  // ===== BARANG HANDLERS =====
+  const handleAddBarang = () => {
+    if (!barangFormData.nama_barang.trim() || !barangFormData.kode_barang.trim()) {
+      toast.error("Nama dan kode barang tidak boleh kosong");
+      return;
+    }
+
+    if (editingBarang) {
+      // Update barang
+      setBarangList(
+        barangList.map(b =>
+          b.id_barang === editingBarang.id_barang
+            ? { ...b, ...barangFormData }
+            : b
+        )
+      );
       toast.success("Barang berhasil diupdate!");
-    } catch (error) {
-      console.error("Error updating item:", error);
-      toast.error("Gagal mengupdate barang");
-    } finally {
-      setUploading(false);
+    } else {
+      // Create barang
+      const newBarang = {
+        id_barang: Math.max(...barangList.map(b => b.id_barang), 0) + 1,
+        id_jenis_barang: selectedJenisId || 1,
+        kode_barang: barangFormData.kode_barang,
+        nama_barang: barangFormData.nama_barang,
+        no_serial_number: barangFormData.no_serial_number,
+        deskripsi_barang: barangFormData.deskripsi_barang,
+        status: barangFormData.status,
+        foto_barang: barangFormData.foto_barang || 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400',
+        created_at: new Date().toISOString(),
+      };
+      setBarangList([...barangList, newBarang]);
+      toast.success("Barang berhasil ditambahkan!");
     }
+
+    setShowAddBarangDialog(false);
+    setBarangFormData({
+      nama_barang: '',
+      kode_barang: '',
+      no_serial_number: '',
+      deskripsi_barang: '',
+      status: 'Tersedia',
+      foto_barang: '',
+    });
+    setEditingBarang(null);
   };
 
-  const handleDeleteItem = async () => {
-    if (!itemToDelete) return;
+  // ===== JENIS QR HANDLERS =====
+  const handleShowJenisQR = async (kode: string, nama: string) => {
     try {
-      await barangAPI.delete(itemToDelete);
-      setItems(items.filter((item) => item.id !== itemToDelete));
-      setDeleteDialogOpen(false);
-      setItemToDelete(null);
-      toast.success("Barang berhasil dihapus!");
-    } catch (error) {
-      console.error("Error deleting item:", error);
-      toast.error("Gagal menghapus barang");
-    }
-  };
-
-  const handleShowQR = async (kodeBarang: string, namaBarang?: string) => {
-    const label = await createLabelDataURL(kodeBarang, namaBarang || kodeBarang);
-    setQrCodeData(label);
-    setCurrentQrCode(kodeBarang);
-    if (namaBarang) setCurrentItemName(namaBarang);
-    setQrDialogOpen(true);
-  };
-
-  const handleDownloadQR = async () => {
-    try {
-      // download a simple composed label PNG (fast)
-      await downloadLabelPNG(currentQrCode, currentItemName || currentQrCode, currentQrCode);
-      toast.success("Label berhasil diunduh!");
+      // small label preview
+      const dataUrl = await createSimpleLabelDataURL(kode, nama, { width: 720, height: 920 });
+      setQrDataUrl(dataUrl);
+      setQrLabelName(`${kode}-${nama}`.replace(/\s+/g, "-"));
+      setQrJenisKode(kode);
+      setQrJenisNama(nama);
+      setQrDialogOpenForJenis(true);
     } catch (err) {
-      console.error("Failed to download label:", err);
-      toast.error("Gagal menyiapkan file. Coba lagi.");
+      console.error("Gagal membuat QR jenis:", err);
+      toast.error("Gagal membuat QR untuk jenis barang");
     }
+  };
+
+  const handleDownloadJenisQR = async (kode: string, nama: string) => {
+    try {
+      await downloadSimpleLabelPNG(kode, nama, `jenis-${kode}`);
+      toast.success("QR jenis berhasil diunduh");
+    } catch (err) {
+      console.error("Gagal mengunduh QR jenis:", err);
+      toast.error("Gagal mengunduh QR jenis");
+    }
+  };
+
+  const handleEditBarang = (barang: any) => {
+    setBarangFormData({
+      nama_barang: barang.nama_barang,
+      kode_barang: barang.kode_barang,
+      no_serial_number: barang.no_serial_number || '',
+      deskripsi_barang: barang.deskripsi_barang || '',
+      status: barang.status,
+      foto_barang: barang.foto_barang || '',
+    });
+    setEditingBarang(barang);
+    setShowAddBarangDialog(true);
+  };
+
+  const handleDeleteBarang = (barangId: number) => {
+    setBarangList(barangList.filter(b => b.id_barang !== barangId));
+    toast.success("Barang berhasil dihapus!");
+    setDeleteTarget(null);
   };
 
   return (
@@ -250,339 +207,478 @@ const Items = () => {
           <div>
             <h2 className="text-3xl font-bold mb-2">Kelola Barang</h2>
             <p className="text-muted-foreground">
-              Tambah, edit, atau hapus data barang Unit TKJ
+              Kelola jenis barang dan item barang yang tersedia
             </p>
           </div>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <Dialog open={showAddJenisDialog} onOpenChange={setShowAddJenisDialog}>
             <DialogTrigger asChild>
-              <Button size="lg" className="shadow-md">
-                <Plus className="h-5 w-5 mr-2" />
-                Tambah Barang
+              <Button
+                onClick={() => {
+                  setSelectedJenisId(null);
+                  setJenisFormData({ nama_jenis_barang: '', deskripsi_jenis_barang: '' });
+                }}
+                className="gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Tambah Jenis Barang
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+            <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Tambah Barang Baru</DialogTitle>
+                <DialogTitle>
+                  {selectedJenisId ? "Edit Jenis Barang" : "Tambah Jenis Barang"}
+                </DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleAddItem} className="space-y-4">
+              <div className="space-y-4">
                 <div>
-                  <Label htmlFor="add-nama">Nama Barang *</Label>
-                  <Input id="add-nama" name="nama" required />
-                </div>
-                <div>
-                  <Label htmlFor="add-stok">Jumlah Stok *</Label>
+                  <label className="text-sm font-medium">Nama Jenis Barang</label>
                   <Input
-                    id="add-stok"
-                    name="stok"
-                    type="number"
-                    min="1"
-                    required
+                    placeholder="Contoh: Peralatan Networking"
+                    value={jenisFormData.nama_jenis_barang}
+                    onChange={(e) =>
+                      setJenisFormData({ ...jenisFormData, nama_jenis_barang: e.target.value })
+                    }
+                    className="mt-1"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="add-foto">Foto Barang</Label>
-                  <Input
-                    id="add-foto"
-                    name="foto"
-                    type="file"
-                    accept="image/*"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Format: JPG, PNG, GIF, WebP (maks 5MB)
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="add-notes">Catatan</Label>
-                  <Textarea
-                    id="add-notes"
-                    name="notes"
-                    placeholder="Keterangan tambahan..."
+                  <label className="text-sm font-medium">Deskripsi</label>
+                  <textarea
+                    placeholder="Deskripsi jenis barang"
+                    value={jenisFormData.deskripsi_jenis_barang}
+                    onChange={(e) =>
+                      setJenisFormData({ ...jenisFormData, deskripsi_jenis_barang: e.target.value })
+                    }
+                    className="w-full p-2 border rounded-md text-sm mt-1"
+                    rows={4}
                   />
                 </div>
-                <Alert>
-                  <AlertDescription className="text-xs">
-                    Kode barang dan QR Code akan dibuat otomatis setelah barang
-                    ditambahkan
-                  </AlertDescription>
-                </Alert>
-                <Button type="submit" className="w-full" disabled={uploading}>
-                  {uploading ? "Menyimpan..." : "Tambah Barang"}
-                </Button>
-              </form>
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddJenisDialog(false)}
+                  >
+                    Batal
+                  </Button>
+                  <Button onClick={handleSaveJenis}>
+                    {selectedJenisId ? "Update" : "Tambah"}
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
 
-        {/* Search */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Cari barang..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Table */}
+        {/* Jenis Barang Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Daftar Barang ({filteredItems.length})</CardTitle>
+            <CardTitle>Daftar Jenis Barang</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>No</TableHead>
-                    <TableHead>Foto</TableHead>
-                    <TableHead>Nama Barang</TableHead>
-                    <TableHead>Kode</TableHead>
-                    <TableHead>Stok</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredItems.map((item, index) => {
-                    const available = item.jumlah_stok - item.jumlah_dipinjam;
+              <table className="w-full text-sm">
+                <thead className="bg-muted border-b">
+                  <tr>
+                    <th className="text-left p-3 font-semibold">Kode</th>
+                    <th className="text-left p-3 font-semibold">Nama Jenis</th>
+                    <th className="text-left p-3 font-semibold">Deskripsi</th>
+                    <th className="text-center p-3 font-semibold">Jumlah Item</th>
+                    <th className="text-center p-3 font-semibold">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {jenisBarangList.map((jenis) => {
+                    const itemCount = getBarangForJenis(jenis.id_jenis_barang).length;
                     return (
-                      <TableRow key={item.id}>
-                        <TableCell>{index + 1}</TableCell>
-                        <TableCell>
-                          {item.foto_barang ? (
-                            <img
-                              src={item.foto_barang}
-                              alt={item.nama_barang}
-                              className="w-12 h-12 object-cover rounded"
-                            />
-                          ) : (
-                            <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-                              <Package className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {item.nama_barang}
-                        </TableCell>
-                        <TableCell>
+                      <tr key={jenis.id_jenis_barang} className="hover:bg-muted/50">
+                        <td className="p-3 font-mono text-xs font-semibold text-primary">
                           <div className="flex items-center gap-2">
-                            <code className="text-xs bg-muted px-2 py-1 rounded">
-                              {item.kode_barang}
-                            </code>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => handleShowQR(item.kode_barang, item.nama_barang)}
-                            >
-                              <QrCode className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            <div>Total: {item.jumlah_stok}</div>
-                            <div className="text-success">
-                              Tersedia: {available}
-                            </div>
-                            <div className="text-warning">
-                              Dipinjam: {item.jumlah_dipinjam}
+                            <code className="bg-muted px-2 py-1 rounded">{jenis.kode_jenis_barang}</code>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleShowJenisQR(jenis.kode_jenis_barang, jenis.nama_jenis_barang)}
+                                title="Tampilkan QR Jenis"
+                              >
+                                <QrCode className="h-4 w-4" />
+                              </Button>
+                              {/* <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDownloadJenisQR(jenis.kode_jenis_barang, jenis.nama_jenis_barang)}
+                                title="Download QR Jenis"
+                              >
+                                <QrCode className="h-4 w-4 opacity-60" />
+                              </Button> */}
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={available > 0 ? "default" : "secondary"}
-                          >
-                            {available > 0 ? "Tersedia" : "Habis"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="max-w-xs truncate text-sm text-muted-foreground">
-                            {item.notes || "-"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-1 justify-end">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setEditingItem(item);
-                                setIsEditDialogOpen(true);
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog
-                              open={
-                                deleteDialogOpen && itemToDelete === item.id
-                              }
-                              onOpenChange={(open) => {
-                                setDeleteDialogOpen(open);
-                                if (!open) setItemToDelete(null);
-                              }}
-                            >
-                              <AlertDialogTrigger asChild>
+                        </td>
+                        <td className="p-3 font-medium">{jenis.nama_jenis_barang}</td>
+                        <td className="p-3 text-muted-foreground text-xs">
+                          {jenis.deskripsi_jenis_barang}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                            {itemCount} item
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center justify-center gap-2">
+                            <Dialog open={showBarangDialog && selectedJenisId === jenis.id_jenis_barang} onOpenChange={setShowBarangDialog}>
+                              <DialogTrigger asChild>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => setItemToDelete(item.id)}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSelectedJenisId(jenis.id_jenis_barang)}
+                                  className="gap-2"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <Eye className="h-4 w-4" />
+                                  Tampilkan Barang
                                 </Button>
-                              </AlertDialogTrigger>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
+                                <DialogHeader className="flex flex-row items-center justify-between">
+                                  <DialogTitle>
+                                    Barang - {getJenisName(selectedJenisId || 0)}
+                                  </DialogTitle>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setBarangFormData({
+                                        nama_barang: '',
+                                        kode_barang: '',
+                                        no_serial_number: '',
+                                        deskripsi_barang: '',
+                                        status: 'Tersedia',
+                                        foto_barang: '',
+                                      });
+                                      setEditingBarang(null);
+                                      setShowAddBarangDialog(true);
+                                    }}
+                                    className="gap-2"
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                    Tambah Barang
+                                  </Button>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                  {getBarangForJenis(selectedJenisId || 0).length > 0 ? (
+                                    <div className="space-y-3">
+                                      {getBarangForJenis(selectedJenisId || 0).map((barang) => (
+                                        <div
+                                          key={barang.id_barang}
+                                          className="border rounded-lg p-4 hover:shadow-md transition-shadow flex gap-4"
+                                        >
+                                          {barang.foto_barang && (
+                                            <img
+                                              src={barang.foto_barang}
+                                              alt={barang.nama_barang}
+                                              className="w-24 h-24 object-cover rounded flex-shrink-0"
+                                            />
+                                          )}
+                                          <div className="flex-1">
+                                            <div className="flex items-start justify-between gap-4">
+                                              <div>
+                                                <h4 className="font-semibold text-base">{barang.nama_barang}</h4>
+                                                <p className="text-xs text-muted-foreground font-mono">
+                                                  {barang.kode_barang}
+                                                </p>
+                                                <p className="text-sm mt-1">{barang.deskripsi_barang}</p>
+                                                {barang.no_serial_number && (
+                                                  <p className="text-xs text-muted-foreground mt-1">
+                                                    SN: {barang.no_serial_number}
+                                                  </p>
+                                                )}
+                                                <div className="flex items-center gap-2 mt-2">
+                                                  <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                    barang.status === 'Tersedia'
+                                                      ? 'bg-green-100 text-green-700'
+                                                      : barang.status === 'Dipinjam'
+                                                      ? 'bg-yellow-100 text-yellow-700'
+                                                      : 'bg-red-100 text-red-700'
+                                                  }`}>
+                                                    {barang.status}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                              <div className="flex gap-2 flex-shrink-0">
+                                                <Button
+                                                  variant="outline"
+                                                  size="sm"
+                                                  onClick={() => {
+                                                    handleEditBarang(barang);
+                                                    setShowAddBarangDialog(true);
+                                                  }}
+                                                  className="gap-1"
+                                                >
+                                                  <Edit2 className="h-4 w-4" />
+                                                  Edit
+                                                </Button>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={async () => {
+                                                    try {
+                                                      const dataUrl = await createBarcodeDataURL(barang.kode_barang, { width: 960, height: 300 });
+                                                      setBarcodeDataUrl(dataUrl);
+                                                      setBarcodeKode(barang.kode_barang);
+                                                      setBarcodeNama(barang.nama_barang);
+                                                      setBarcodeDialogOpen(true);
+                                                    } catch (err) {
+                                                      console.error("Gagal membuat barcode:", err);
+                                                      toast.error("Gagal membuat barcode");
+                                                    }
+                                                  }}
+                                                  className="gap-1"
+                                                >
+                                                  <Barcode className="h-4 w-4" />
+                                                  Barcode
+                                                </Button>
+                                                <AlertDialog open={deleteTarget?.type === 'barang' && deleteTarget?.id === barang.id_barang} onOpenChange={(open) => {
+                                                  if (!open) setDeleteTarget(null);
+                                                }}>
+                                                  <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    onClick={() => setDeleteTarget({ type: 'barang', id: barang.id_barang })}
+                                                    className="gap-1"
+                                                  >
+                                                    <Trash2 className="h-4 w-4" />
+                                                    Hapus
+                                                  </Button>
+                                                  <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                      <AlertDialogTitle>Hapus Barang?</AlertDialogTitle>
+                                                      <AlertDialogDescription>
+                                                        Apakah Anda yakin ingin menghapus "{barang.nama_barang}"? Tindakan ini tidak bisa dibatalkan.
+                                                      </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <div className="flex gap-2 justify-end">
+                                                      <AlertDialogCancel onClick={() => setDeleteTarget(null)}>
+                                                        Batal
+                                                      </AlertDialogCancel>
+                                                      <AlertDialogAction
+                                                        onClick={() => handleDeleteBarang(barang.id_barang)}
+                                                        className="bg-red-600 hover:bg-red-700"
+                                                      >
+                                                        Hapus
+                                                      </AlertDialogAction>
+                                                    </div>
+                                                  </AlertDialogContent>
+                                                </AlertDialog>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="text-center py-12 text-muted-foreground">
+                                      <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                                      <p>Tidak ada barang untuk jenis ini</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditJenis(jenis)}
+                              className="gap-2"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                              Edit
+                            </Button>
+
+                            <AlertDialog open={deleteTarget?.type === 'jenis' && deleteTarget?.id === jenis.id_jenis_barang} onOpenChange={(open) => {
+                              if (!open) setDeleteTarget(null);
+                            }}>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setDeleteTarget({ type: 'jenis', id: jenis.id_jenis_barang })}
+                                className="gap-2"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>
-                                    Konfirmasi Hapus Barang
-                                  </AlertDialogTitle>
+                                  <AlertDialogTitle>Hapus Jenis Barang?</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Apakah Anda yakin ingin menghapus barang{" "}
-                                    <strong>{item.nama_barang}</strong>?
-                                    Tindakan ini tidak dapat dibatalkan.
+                                    Menghapus jenis barang akan menghapus semua barang di dalamnya. Tindakan ini tidak bisa dibatalkan.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                                <div className="flex gap-2 justify-end">
+                                  <AlertDialogCancel onClick={() => setDeleteTarget(null)}>
+                                    Batal
+                                  </AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={handleDeleteItem}
-                                    className="bg-destructive hover:bg-destructive/90"
+                                    onClick={() => handleDeleteJenis(jenis.id_jenis_barang)}
+                                    className="bg-red-600 hover:bg-red-700"
                                   >
                                     Hapus
                                   </AlertDialogAction>
-                                </AlertDialogFooter>
+                                </div>
                               </AlertDialogContent>
                             </AlertDialog>
                           </div>
-                        </TableCell>
-                      </TableRow>
+                        </td>
+                      </tr>
                     );
                   })}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
+            {jenisBarangList.length === 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>Belum ada jenis barang</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Edit Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="!max-w-md max-h-[90vh] overflow-y-auto">
+        {/* Add/Edit Barang Dialog */}
+        <Dialog open={showAddBarangDialog} onOpenChange={setShowAddBarangDialog}>
+          <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Edit Barang</DialogTitle>
-            </DialogHeader>
-            {editingItem && (
-              <form onSubmit={handleEditItem} className="space-y-4">
-                <div>
-                  <Label>Kode Barang</Label>
-                  <Input value={editingItem.kode_barang} disabled />
-                </div>
-                <div>
-                  <Label htmlFor="edit-nama">Nama Barang *</Label>
-                  <Input
-                    id="edit-nama"
-                    name="nama"
-                    defaultValue={editingItem.nama_barang}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="edit-stok">Jumlah Stok *</Label>
-                  <Input
-                    id="edit-stok"
-                    name="stok"
-                    type="number"
-                    min="0"
-                    defaultValue={editingItem.jumlah_stok}
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Saat ini dipinjam: {editingItem.jumlah_dipinjam}
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="edit-foto">Foto Barang</Label>
-                  {editingItem.foto_barang && (
-                    <img
-                      src={editingItem.foto_barang}
-                      alt="Current"
-                      className="w-24 h-24 object-cover rounded mb-2"
-                    />
-                  )}
-                  <Input
-                    id="edit-foto"
-                    name="foto"
-                    type="file"
-                    accept="image/*"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Kosongkan jika tidak ingin mengubah foto
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="edit-notes">Catatan</Label>
-                  <Textarea
-                    id="edit-notes"
-                    name="notes"
-                    defaultValue={editingItem.notes}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsEditDialogOpen(false)}
-                    className="flex-1"
-                  >
-                    Batal
-                  </Button>
-                  <Button type="submit" className="flex-1" disabled={uploading}>
-                    {uploading ? "Menyimpan..." : "Simpan"}
-                  </Button>
-                </div>
-              </form>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* QR Code Dialog */}
-        <Dialog open={qrDialogOpen} onOpenChange={setQrDialogOpen}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>QR Code Barang</DialogTitle>
+              <DialogTitle>
+                {editingBarang ? "Edit Barang" : "Tambah Barang"}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="bg-orange-700/5 p-2 rounded-lg text-center">
-                <code className="font-mono text-2xl font-bold">{currentQrCode}</code>
+              <div>
+                <label className="text-sm font-medium">Nama Barang *</label>
+                <Input
+                  placeholder="Contoh: Router Cisco 2911"
+                  value={barangFormData.nama_barang}
+                  onChange={(e) =>
+                    setBarangFormData({ ...barangFormData, nama_barang: e.target.value })
+                  }
+                  className="mt-1"
+                />
               </div>
-              {qrCodeData && (
-                <div className="flex justify-center">
-                  <img src={qrCodeData} alt="QR Code" className="h-full outline-orange-800 rounded-md outline-double" />
-                </div>
-              )}
-              <div className="flex gap-2">
+              <div>
+                <label className="text-sm font-medium">Kode Barang *</label>
+                <Input
+                  placeholder="Contoh: BRG-001"
+                  value={barangFormData.kode_barang}
+                  onChange={(e) =>
+                    setBarangFormData({ ...barangFormData, kode_barang: e.target.value })
+                  }
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">No. Serial</label>
+                <Input
+                  placeholder="Contoh: CSC-2911-001"
+                  value={barangFormData.no_serial_number}
+                  onChange={(e) =>
+                    setBarangFormData({ ...barangFormData, no_serial_number: e.target.value })
+                  }
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Deskripsi</label>
+                <textarea
+                  placeholder="Deskripsi barang"
+                  value={barangFormData.deskripsi_barang}
+                  onChange={(e) =>
+                    setBarangFormData({ ...barangFormData, deskripsi_barang: e.target.value })
+                  }
+                  className="w-full p-2 border rounded-md text-sm mt-1"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Status</label>
+                <select
+                  value={barangFormData.status}
+                  onChange={(e) =>
+                    setBarangFormData({ ...barangFormData, status: e.target.value })
+                  }
+                  className="w-full p-2 border rounded-md text-sm mt-1"
+                >
+                  <option value="Tersedia">Tersedia</option>
+                  <option value="Dipinjam">Dipinjam</option>
+                  <option value="Rusak">Rusak</option>
+                  <option value="Hilang">Hilang</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">URL Foto</label>
+                <Input
+                  placeholder="https://..."
+                  value={barangFormData.foto_barang}
+                  onChange={(e) =>
+                    setBarangFormData({ ...barangFormData, foto_barang: e.target.value })
+                  }
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
-                  onClick={() => setQrDialogOpen(false)}
-                  className="flex-1"
+                  onClick={() => {
+                    setShowAddBarangDialog(false);
+                    setEditingBarang(null);
+                  }}
                 >
-                  Tutup
+                  Batal
                 </Button>
-                <Button onClick={handleDownloadQR} className="flex-1">
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
+                <Button onClick={handleAddBarang}>
+                  {editingBarang ? "Update" : "Tambah"}
                 </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Jenis QR Preview / Download Dialog */}
+        <Dialog open={qrDialogOpenForJenis} onOpenChange={setQrDialogOpenForJenis}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>QR Jenis Barang</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-center">
+              {qrDataUrl ? (
+                <img src={qrDataUrl} alt={`QR ${qrJenisKode}`} className="mx-auto rounded-md shadow-md" />
+              ) : (
+                <div className="py-12">Membuat preview QR...</div>
+              )}
+              <div className="flex gap-2 justify-center">
+                <Button variant="outline" onClick={() => setQrDialogOpenForJenis(false)}>Tutup</Button>
+                <Button onClick={() => handleDownloadJenisQR(qrJenisKode, qrJenisNama)}>Download</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Barang Barcode Preview / Download Dialog */}
+        <Dialog open={barcodeDialogOpen} onOpenChange={setBarcodeDialogOpen}>
+          <DialogContent className="max-w-md scale-150">
+            <DialogHeader>
+              <DialogTitle>Barcode Barang</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-center">
+              {barcodeDataUrl ? (
+                <img src={barcodeDataUrl} alt={`Barcode ${barcodeKode}`} className="mx-auto rounded-md shadow-md" />
+              ) : (
+                <div className="py-12">Membuat preview barcode...</div>
+              )}
+              <div className="flex gap-2 justify-center">
+                <Button variant="outline" onClick={() => setBarcodeDialogOpen(false)}>Tutup</Button>
+                <Button onClick={() => downloadBarcodePNG(barcodeKode, `barcode-${barcodeKode}`)}>Download</Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </AdminLayout>
   );
