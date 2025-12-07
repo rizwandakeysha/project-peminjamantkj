@@ -23,6 +23,7 @@ const QRScanner = ({
   const barcodeLoopRef = useRef<number | null>(null);
   const barcodeDetectorRef = useRef<any | null>(null);
   const hasStoppedRef = useRef<boolean>(false);
+  const isProcessingRef = useRef<boolean>(false); // Lock to prevent multiple scans
   const [cameraPermission, setCameraPermission] = useState<
     "granted" | "denied" | "prompt"
   >("prompt");
@@ -46,11 +47,13 @@ const QRScanner = ({
       // Stop native BarcodeDetector path: stop video tracks and cancel loop
       if (videoElRef.current) {
         try {
-          const stream = (videoElRef.current as HTMLVideoElement).srcObject as MediaStream | null;
+          const stream = (videoElRef.current as HTMLVideoElement)
+            .srcObject as MediaStream | null;
           if (stream) stream.getTracks().forEach((t) => t.stop());
         } catch (e) {}
         try {
-          if (videoElRef.current.parentElement) videoElRef.current.parentElement.removeChild(videoElRef.current);
+          if (videoElRef.current.parentElement)
+            videoElRef.current.parentElement.removeChild(videoElRef.current);
         } catch (e) {}
         videoElRef.current = null;
       }
@@ -76,11 +79,14 @@ const QRScanner = ({
       hasStoppedRef.current = false;
       if (isScanning) return; // avoid starting twice
       // Prefer native BarcodeDetector when available (faster)
-      const supportsBarcodeDetector = typeof (window as any).BarcodeDetector === "function";
+      const supportsBarcodeDetector =
+        typeof (window as any).BarcodeDetector === "function";
 
       if (supportsBarcodeDetector) {
         try {
-          barcodeDetectorRef.current = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+          barcodeDetectorRef.current = new (window as any).BarcodeDetector({
+            formats: ["qr_code"],
+          });
 
           const container = document.getElementById("qr-reader");
           if (!container) throw new Error("Missing qr-reader container");
@@ -93,7 +99,11 @@ const QRScanner = ({
           videoElRef.current = video;
 
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+            video: {
+              facingMode: "environment",
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+            },
             audio: false,
           });
 
@@ -112,6 +122,10 @@ const QRScanner = ({
               try {
                 const barcodes = await barcodeDetectorRef.current.detect(video);
                 if (barcodes && barcodes.length > 0) {
+                  // Prevent multiple callbacks for same/different scan
+                  if (isProcessingRef.current) return;
+                  isProcessingRef.current = true;
+
                   const code = barcodes[0];
                   await stopScanner(false);
                   onScanSuccess(code.rawValue || code.rawText || "");
@@ -127,14 +141,20 @@ const QRScanner = ({
           barcodeLoopRef.current = requestAnimationFrame(loop);
           return;
         } catch (err) {
-          console.warn("BarcodeDetector init failed, falling back to html5-qrcode:", err);
+          console.warn(
+            "BarcodeDetector init failed, falling back to html5-qrcode:",
+            err
+          );
           barcodeDetectorRef.current = null;
           if (videoElRef.current) {
             try {
-              const s = (videoElRef.current as HTMLVideoElement).srcObject as MediaStream | null;
+              const s = (videoElRef.current as HTMLVideoElement)
+                .srcObject as MediaStream | null;
               if (s) s.getTracks().forEach((t) => t.stop());
             } catch (e) {}
-            try { videoElRef.current.remove(); } catch (e) {}
+            try {
+              videoElRef.current.remove();
+            } catch (e) {}
             videoElRef.current = null;
           }
         }
@@ -155,13 +175,21 @@ const QRScanner = ({
       const config = {
         fps: 20,
         qrbox: { width: qrboxSize, height: qrboxSize },
-        videoConstraints: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+        videoConstraints: {
+          facingMode: "environment",
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
       } as any;
 
       await html5QrCode.start(
         { facingMode: "environment" },
         config,
         async (decodedText) => {
+          // Prevent multiple callbacks
+          if (isProcessingRef.current) return;
+          isProcessingRef.current = true;
+
           await stopScanner(false);
           onScanSuccess(decodedText);
         },

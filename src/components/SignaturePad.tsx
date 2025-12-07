@@ -73,21 +73,18 @@ const SignaturePad = ({
   };
 
   const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
     const canvas = canvasRef.current!;
     const { x, y } = getPos(e.nativeEvent as any, canvas);
     startDrawing(x, y);
   };
 
   const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
     const canvas = canvasRef.current!;
     const { x, y } = getPos(e.nativeEvent as any, canvas);
     draw(x, y);
   };
 
   const handlePointerUp = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
     stopDrawing();
   };
 

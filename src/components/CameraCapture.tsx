@@ -8,11 +8,13 @@ import SignaturePad from "@/components/SignaturePad";
 interface CameraCaptureProps {
   onCapture: (imageData: string) => void;
   label?: string;
+  isSubmitting?: boolean;
 }
 
 const CameraCapture = ({
   onCapture,
   label = "Ambil Foto",
+  isSubmitting = false,
 }: CameraCaptureProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -148,8 +150,8 @@ const CameraCapture = ({
           <SignaturePad
             label="Tanda Tangan Digital"
             onConfirm={(img) => {
-              setCapturedImage(img);
-              setError("");
+              // For signature pad, directly call onCapture without waiting for button click
+              onCapture(img);
             }}
           />
         )}
@@ -159,7 +161,9 @@ const CameraCapture = ({
               If camera is unavailable we render SignaturePad above (useSignature=true).
               When streaming, show capture button. */}
           {!useSignature && !isStreaming && !capturedImage && (
-            <div className="text-center text-sm text-muted-foreground">Mencoba mengaktifkan kamera...</div>
+            <div className="text-center text-sm text-muted-foreground">
+              Mencoba mengaktifkan kamera...
+            </div>
           )}
 
           {isStreaming && !capturedImage && (
@@ -171,16 +175,21 @@ const CameraCapture = ({
 
           {capturedImage && (
             <div className="grid grid-cols-2 gap-2">
-              <Button onClick={retakePhoto} variant="outline">
+              <Button
+                onClick={retakePhoto}
+                variant="outline"
+                disabled={isSubmitting}
+              >
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Ulangi
               </Button>
               <Button
                 onClick={confirmPhoto}
                 className="bg-success hover:bg-success-light"
+                disabled={isSubmitting}
               >
                 <Check className="h-4 w-4 mr-2" />
-                Gunakan
+                {isSubmitting ? "Sedang submit..." : "Gunakan"}
               </Button>
             </div>
           )}

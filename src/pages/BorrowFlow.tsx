@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import PublicLayout from "@/layouts/PublicLayout";
 import QRScanner from "@/components/QRScanner";
@@ -122,6 +122,13 @@ const BorrowFlow = () => {
   const [borrowingCode, setBorrowingCode] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Scan deduplication using ref to avoid re-renders
+  const lastScanRef = useRef<{ code: string; time: number }>({
+    code: "",
+    time: 0,
+  });
+  const SCAN_DEBOUNCE_MS = 1500; // 1.5 seconds
+
   // Load data on mount
   useEffect(() => {
     const loadData = async () => {
@@ -184,56 +191,71 @@ const BorrowFlow = () => {
     }
   }, [selectedKelas, borrowerRole, allSiswa]);
 
-  const handleQRScan = async (decodedText: string) => {
-    try {
-      // Check if it's a jenis code
-      const jenisBarang = allBarang.find((b) => b.kode_jenis === decodedText);
+  const handleQRScan = useCallback(
+    async (decodedText: string) => {
+      try {
+        // Deduplication using ref: ignore if same code scanned within SCAN_DEBOUNCE_MS
+        const now = Date.now();
+        if (
+          decodedText === lastScanRef.current.code &&
+          now - lastScanRef.current.time < SCAN_DEBOUNCE_MS
+        ) {
+          console.log("Duplicate scan ignored:", decodedText);
+          return;
+        }
 
-      if (jenisBarang) {
-        // Scan jenis - get all barang with this jenis code
-        const itemsOfJenis = allBarang.filter(
-          (b) => b.kode_jenis === decodedText && b.status === "Tersedia"
-        );
-        if (itemsOfJenis.length > 0) {
-          setSelectedJenisCode(decodedText);
-          setAvailableItems(itemsOfJenis);
-          setSelectedItem(null);
-          setSelectedItemIds([]);
-          setCurrentStep("form");
-          toast.success(
-            `${itemsOfJenis.length} barang tersedia untuk jenis ini`
+        lastScanRef.current = { code: decodedText, time: now };
+
+        // Check if it's a jenis code
+        const jenisBarang = allBarang.find((b) => b.kode_jenis === decodedText);
+
+        if (jenisBarang) {
+          // Scan jenis - get all barang with this jenis code
+          const itemsOfJenis = allBarang.filter(
+            (b) => b.kode_jenis === decodedText && b.status === "Tersedia"
           );
-          return;
+          if (itemsOfJenis.length > 0) {
+            setSelectedJenisCode(decodedText);
+            setAvailableItems(itemsOfJenis);
+            setSelectedItem(null);
+            setSelectedItemIds([]);
+            setCurrentStep("form");
+            toast.success(
+              `${itemsOfJenis.length} barang tersedia untuk jenis ini`
+            );
+            return;
+          } else {
+            toast.error("Tidak ada barang tersedia untuk jenis ini");
+            return;
+          }
+        }
+
+        // Check if it's individual barang code
+        const barang = allBarang.find((b) => b.kode_barang === decodedText);
+
+        if (barang) {
+          if (barang.status !== "Tersedia") {
+            toast.error(`Barang tidak tersedia (Status: ${barang.status})`);
+            return;
+          }
+
+          setSelectedItem(barang);
+          setSelectedJenisCode(barang.kode_jenis || null);
+          setAvailableItems([]);
+          setSelectedItemIds([]);
+          setFormData((prev) => ({}));
+          setCurrentStep("form");
+          toast.success(`Barang "${barang.nama_barang}" dipilih`);
         } else {
-          toast.error("Tidak ada barang tersedia untuk jenis ini");
-          return;
+          toast.error("QR Code tidak valid atau barang tidak ditemukan");
         }
+      } catch (error) {
+        console.error("Error in QR scan:", error);
+        toast.error("Gagal memproses QR Code");
       }
-
-      // Check if it's individual barang code
-      const barang = allBarang.find((b) => b.kode_barang === decodedText);
-
-      if (barang) {
-        if (barang.status !== "Tersedia") {
-          toast.error(`Barang tidak tersedia (Status: ${barang.status})`);
-          return;
-        }
-
-        setSelectedItem(barang);
-        setSelectedJenisCode(barang.kode_jenis || null);
-        setAvailableItems([]);
-        setSelectedItemIds([]);
-        setFormData((prev) => ({}));
-        setCurrentStep("form");
-        toast.success(`Barang "${barang.nama_barang}" dipilih`);
-      } else {
-        toast.error("QR Code tidak valid atau barang tidak ditemukan");
-      }
-    } catch (error) {
-      console.error("Error in QR scan:", error);
-      toast.error("Gagal memproses QR Code");
-    }
-  };
+    },
+    [allBarang]
+  );
 
   const handleManualCode = () => {
     const kodeBarang = (
@@ -827,6 +849,7 @@ const BorrowFlow = () => {
                         setSelectedItem(null);
                         setAvailableItems([]);
                         setSelectedItemIds([]);
+                        lastScanRef.current = { code: "", time: 0 };
                       }}
                     >
                       <ArrowLeft className="h-4 w-4 mr-2" />
@@ -855,6 +878,7 @@ const BorrowFlow = () => {
             <CameraCapture
               onCapture={handlePhotoCapture}
               label="Foto Peminjam & Barang"
+              isSubmitting={isSubmitting}
             />
             <Button
               variant="outline"

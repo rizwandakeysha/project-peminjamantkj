@@ -174,7 +174,10 @@ exports.createPeminjaman = async (req, res) => {
     const kode_peminjaman = generateBorrowingCode();
 
     // Insert peminjaman header
-    const guruPendampingValue = (guru_pendamping && guru_pendamping.trim()) ? guru_pendamping.trim() : null;
+    // Handle empty/null values - convert to meaningful defaults for NOT NULL columns
+    const guruPendampingValue = (guru_pendamping && guru_pendamping.trim()) 
+      ? guru_pendamping.trim() 
+      : "-"; // Default value for NOT NULL constraint
     const kontakValue = (kontak && kontak.trim()) ? kontak.trim() : null;
     
     const peminjamanResult = await client.query(
