@@ -2,7 +2,8 @@ import { Item } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Package, Info } from "lucide-react";
+import { Package } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 
 interface ItemCardProps {
   item: Item;
@@ -10,18 +11,63 @@ interface ItemCardProps {
 }
 
 const ItemCard = ({ item, onBorrow }: ItemCardProps) => {
-  const availableStock = item.jumlah_stok - item.jumlah_dipinjam;
-  const isAvailable = availableStock > 0;
+  const isAvailable = item.status === "Tersedia";
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  // Lazy load image using Intersection Observer
+  useEffect(() => {
+    if (!imageRef.current || !item.foto_barang) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          // Load image when it becomes visible
+          if (imageRef.current) {
+            imageRef.current.src = item.foto_barang!;
+          }
+          observer.unobserve(imageRef.current);
+        }
+      },
+      { rootMargin: "50px" } // Start loading 50px before image comes into view
+    );
+
+    observer.observe(imageRef.current);
+
+    return () => {
+      if (imageRef.current) {
+        observer.unobserve(imageRef.current);
+      }
+    };
+  }, [item.foto_barang]);
+
+  const statusDisplay = {
+    Tersedia: { label: "Tersedia", variant: "default", color: "bg-success" },
+    Dipinjam: { label: "Dipinjam", variant: "secondary", color: "bg-warning" },
+    Rusak: { label: "Rusak", variant: "secondary", color: "bg-destructive" },
+    Hilang: { label: "Hilang", variant: "secondary", color: "bg-muted" },
+  };
+
+  const currentStatus = statusDisplay[item.status];
 
   return (
     <Card className="overflow-hidden hover:shadow-custom-lg transition-all duration-300 group">
       <div className="aspect-video relative overflow-hidden bg-muted">
         {item.foto_barang ? (
-          <img
-            src={item.foto_barang}
-            alt={item.nama_barang}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
+          <>
+            <img
+              ref={imageRef}
+              alt={item.nama_barang}
+              className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-300 ${
+                imageLoaded ? "opacity-100" : "opacity-0"
+              }`}
+              onLoad={() => setImageLoaded(true)}
+              loading="lazy"
+            />
+            {!imageLoaded && (
+              <div className="absolute inset-0 bg-muted animate-pulse" />
+            )}
+          </>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Package className="h-16 w-16 text-muted-foreground/30" />
@@ -29,43 +75,45 @@ const ItemCard = ({ item, onBorrow }: ItemCardProps) => {
         )}
         <div className="absolute top-2 right-2">
           <Badge
-            variant={isAvailable ? "default" : "secondary"}
-            className={isAvailable ? "bg-success" : "bg-muted"}
+            variant={currentStatus.variant as any}
+            className={currentStatus.color}
           >
-            {isAvailable ? "Tersedia" : "Habis"}
+            {currentStatus.label}
           </Badge>
         </div>
       </div>
 
       <CardContent className="p-4">
         <div className="mb-3">
-          <h3 className="font-semibold text-lg mb-1 line-clamp-1">{item.nama_barang}</h3>
-          <p className="text-sm text-muted-foreground">Kode: {item.kode_barang}</p>
+          <h3 className="font-semibold text-lg mb-1 line-clamp-1">
+            {item.nama_barang}
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Kode: {item.kode_barang}
+          </p>
         </div>
 
         <div className="space-y-2 mb-4">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Total Stok:</span>
-            <span className="font-medium">{item.jumlah_stok}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Tersedia:</span>
-            <span className="font-medium text-success">{availableStock}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Dipinjam:</span>
-            <span className="font-medium text-warning">{item.jumlah_dipinjam}</span>
-          </div>
-        </div>
-
-        {item.notes && (
-          <div className="mb-4 p-2 bg-accent/50 rounded-md">
-            <div className="flex gap-2 items-start">
-              <Info className="h-4 w-4 text-accent-foreground mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-accent-foreground line-clamp-2">{item.notes}</p>
+          {item.nama_jenis && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Jenis:</span>
+              <span className="font-medium">{item.nama_jenis}</span>
             </div>
-          </div>
-        )}
+          )}
+          {item.no_serial_number && (
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">No. Seri:</span>
+              <span className="font-medium text-xs font-mono">
+                {item.no_serial_number}
+              </span>
+            </div>
+          )}
+          {item.deskripsi_barang && (
+            <div className="text-sm text-muted-foreground line-clamp-2">
+              {item.deskripsi_barang}
+            </div>
+          )}
+        </div>
 
         <Button
           onClick={() => onBorrow?.(item)}
