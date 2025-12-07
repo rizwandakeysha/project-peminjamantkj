@@ -29,7 +29,7 @@ import {
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatStudentDisplay, formatTeacherDisplay } from "@/lib/formatters";
-import BorrowerLabel from "@/components/BorrowerLabel";
+import { BorrowerLabel } from "@/components/BorrowerLabel";
 import {
   ArrowLeft,
   ArrowRight,
@@ -54,7 +54,6 @@ type Step = "scan" | "form" | "photo" | "summary";
 
 interface BarangData extends Item {
   id_jenis_barang?: number;
-  status?: string;
 }
 
 interface GuruData {
@@ -243,7 +242,12 @@ const BorrowFlow = () => {
           setSelectedJenisCode(barang.kode_jenis || null);
           setAvailableItems([]);
           setSelectedItemIds([]);
-          setFormData((prev) => ({}));
+          setFormData({
+            nama_peminjam: "",
+            kontak: "",
+            keperluan: "",
+            guru_pendamping: "",
+          });
           setCurrentStep("form");
           toast.success(`Barang "${barang.nama_barang}" dipilih`);
         } else {
@@ -659,109 +663,151 @@ const BorrowFlow = () => {
                       </div>
                     )}
 
-                  <div>
-                    <Label htmlFor="nama">Nama Peminjam *</Label>
-                    <Popover open={openNamaPeminjam} onOpenChange={setOpenNamaPeminjam}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          id="nama"
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openNamaPeminjam}
-                          className="mt-1 w-full justify-between"
-                        >
-                          {formData.nama_peminjam ? (
-                            <BorrowerLabel label={formData.nama_peminjam} role={borrowerRole} />
-                          ) : (
-                            (borrowerRole === "guru" ? "Pilih Guru..." : "Pilih Siswa...")
-                          )}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
-                        <Command>
-                          <CommandInput
-                            placeholder={borrowerRole === "guru" ? "Cari guru..." : "Cari siswa..."}
-                            value={searchNamaPeminjam}
-                            onValueChange={setSearchNamaPeminjam}
-                          />
-                          <CommandEmpty>Tidak ada data ditemukan</CommandEmpty>
-                          <div className="max-h-64 overflow-y-auto">
-                            {borrowerRole === "guru" ? (
-                              mockTeachers
-                                .filter((t) =>
-                                  formatTeacherDisplay(t).toLowerCase().includes(searchNamaPeminjam.toLowerCase())
-                                )
-                                .map((t) => (
-                                  <CommandItem
-                                    key={t.nip}
-                                    value={formatTeacherDisplay(t)}
-                                    onSelect={(currentValue) => {
-                                      setFormData({
-                                        ...formData,
-                                        nama_peminjam: currentValue === formData.nama_peminjam ? "" : currentValue,
-                                      });
-                                      setOpenNamaPeminjam(false);
-                                      setSearchNamaPeminjam("");
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        formData.nama_peminjam === formatTeacherDisplay(t) ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    <BorrowerLabel label={formatTeacherDisplay(t)} role="guru" />
-                                  </CommandItem>
-                                ))
+                    <div>
+                      <Label htmlFor="nama">Nama Peminjam *</Label>
+                      <Popover
+                        open={openNamaPeminjam}
+                        onOpenChange={setOpenNamaPeminjam}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button
+                            id="nama"
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={openNamaPeminjam}
+                            className="mt-1 w-full justify-between"
+                          >
+                            {formData.nama_peminjam ? (
+                              <BorrowerLabel
+                                label={formData.nama_peminjam}
+                                role={borrowerRole}
+                              />
+                            ) : borrowerRole === "guru" ? (
+                              "Pilih Guru..."
                             ) : (
-                              mockStudents
-                                .filter((s) =>
-                                  (selectedKelas === "" || s.kelas === selectedKelas) &&
-                                  formatStudentDisplay(s).toLowerCase().includes(searchNamaPeminjam.toLowerCase())
-                                )
-                                .map((s) => (
-                                  <CommandItem
-                                    key={s.nis}
-                                    value={formatStudentDisplay(s)}
-                                    onSelect={(currentValue) => {
-                                      setFormData({
-                                        ...formData,
-                                        nama_peminjam: currentValue === formData.nama_peminjam ? "" : currentValue,
-                                      });
-                                      setOpenNamaPeminjam(false);
-                                      setSearchNamaPeminjam("");
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        formData.nama_peminjam === formatStudentDisplay(s) ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    <BorrowerLabel label={formatStudentDisplay(s)} role="siswa" />
-                                  </CommandItem>
-                                ))
+                              "Pilih Siswa..."
                             )}
-                          </div>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput
+                              placeholder={
+                                borrowerRole === "guru"
+                                  ? "Cari guru..."
+                                  : "Cari siswa..."
+                              }
+                              value={searchNamaPeminjam}
+                              onValueChange={setSearchNamaPeminjam}
+                            />
+                            <CommandEmpty>
+                              Tidak ada data ditemukan
+                            </CommandEmpty>
+                            <div className="max-h-64 overflow-y-auto">
+                              {borrowerRole === "guru"
+                                ? allGuru
+                                    .filter((t) =>
+                                      formatTeacherDisplay(t)
+                                        .toLowerCase()
+                                        .includes(
+                                          searchNamaPeminjam.toLowerCase()
+                                        )
+                                    )
+                                    .map((t) => (
+                                      <CommandItem
+                                        key={t.nip}
+                                        value={formatTeacherDisplay(t)}
+                                        onSelect={(currentValue) => {
+                                          setFormData({
+                                            ...formData,
+                                            nama_peminjam:
+                                              currentValue ===
+                                              formData.nama_peminjam
+                                                ? ""
+                                                : currentValue,
+                                          });
+                                          setOpenNamaPeminjam(false);
+                                          setSearchNamaPeminjam("");
+                                        }}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            formData.nama_peminjam ===
+                                              formatTeacherDisplay(t)
+                                              ? "opacity-100"
+                                              : "opacity-0"
+                                          )}
+                                        />
+                                        <BorrowerLabel
+                                          label={formatTeacherDisplay(t)}
+                                          role="guru"
+                                        />
+                                      </CommandItem>
+                                    ))
+                                : allSiswa
+                                    .filter(
+                                      (s) =>
+                                        (selectedKelas === "" ||
+                                          s.kelas === selectedKelas) &&
+                                        formatStudentDisplay(s)
+                                          .toLowerCase()
+                                          .includes(
+                                            searchNamaPeminjam.toLowerCase()
+                                          )
+                                    )
+                                    .map((s) => (
+                                      <CommandItem
+                                        key={s.nis}
+                                        value={formatStudentDisplay(s)}
+                                        onSelect={(currentValue) => {
+                                          setFormData({
+                                            ...formData,
+                                            nama_peminjam:
+                                              currentValue ===
+                                              formData.nama_peminjam
+                                                ? ""
+                                                : currentValue,
+                                          });
+                                          setOpenNamaPeminjam(false);
+                                          setSearchNamaPeminjam("");
+                                        }}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            formData.nama_peminjam ===
+                                              formatStudentDisplay(s)
+                                              ? "opacity-100"
+                                              : "opacity-0"
+                                          )}
+                                        />
+                                        <BorrowerLabel
+                                          label={formatStudentDisplay(s)}
+                                          role="siswa"
+                                        />
+                                      </CommandItem>
+                                    ))}
+                            </div>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div>
+                      <Label htmlFor="kontak">Nomor Kontak (WA) *</Label>
+                      <Input
+                        id="kontak"
+                        type="tel"
+                        value={formData.kontak}
+                        onChange={(e) =>
+                          setFormData({ ...formData, kontak: e.target.value })
+                        }
+                        placeholder="08xxxxxxxxxx"
+                        required
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="kontak">Nomor Kontak (WA) *</Label>
-                    <Input
-                      id="kontak"
-                      type="tel"
-                      value={formData.kontak}
-                      onChange={(e) =>
-                        setFormData({ ...formData, kontak: e.target.value })
-                      }
-                      placeholder="08xxxxxxxxxx"
-                      required
-                    />
-                  </div>
-                </div>
 
                   <div>
                     <Label htmlFor="keperluan">Keperluan *</Label>
@@ -791,7 +837,10 @@ const BorrowFlow = () => {
                             className="mt-1 w-full justify-between"
                           >
                             {formData.guru_pendamping ? (
-                              <BorrowerLabel label={formData.guru_pendamping} role="guru" />
+                              <BorrowerLabel
+                                label={formData.guru_pendamping}
+                                role="guru"
+                              />
                             ) : (
                               "Pilih Guru..."
                             )}
@@ -807,18 +856,22 @@ const BorrowFlow = () => {
                             />
                             <CommandEmpty>Tidak ada guru</CommandEmpty>
                             <div className="max-h-64 overflow-y-auto">
-                              {mockTeachers
+                              {allGuru
                                 .filter((t) =>
-                                  formatTeacherDisplay(t).toLowerCase().includes(searchGuruPendamping.toLowerCase())
+                                  formatTeacherDisplay(t)
+                                    .toLowerCase()
+                                    .includes(
+                                      searchGuruPendamping.toLowerCase()
+                                    )
                                 )
                                 .map((g) => (
                                   <CommandItem
-                                    key={t.nip}
-                                    value={formatTeacherDisplay(t)}
+                                    key={g.nip}
+                                    value={formatTeacherDisplay(g)}
                                     onSelect={(currentValue) => {
                                       setFormData({
                                         ...formData,
-                                        guru_pendamping: value,
+                                        guru_pendamping: currentValue,
                                       });
                                       setOpenGuruPendamping(false);
                                       setSearchGuruPendamping("");
@@ -827,10 +880,16 @@ const BorrowFlow = () => {
                                     <Check
                                       className={cn(
                                         "mr-2 h-4 w-4",
-                                        formData.guru_pendamping === formatTeacherDisplay(t) ? "opacity-100" : "opacity-0"
+                                        formData.guru_pendamping ===
+                                          formatTeacherDisplay(g)
+                                          ? "opacity-100"
+                                          : "opacity-0"
                                       )}
                                     />
-                                    <BorrowerLabel label={formatTeacherDisplay(t)} role="guru" />
+                                    <BorrowerLabel
+                                      label={formatTeacherDisplay(g)}
+                                      role="guru"
+                                    />
                                   </CommandItem>
                                 ))}
                             </div>
