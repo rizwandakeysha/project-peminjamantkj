@@ -9,6 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Command,
   CommandEmpty,
   CommandInput,
@@ -252,7 +259,9 @@ const BorrowFlow = () => {
   );
 
   const handleManualCode = () => {
-    const kodeBarang = (document.getElementById("manual-code") as HTMLInputElement)?.value;
+    const kodeBarang = (
+      document.getElementById("manual-code") as HTMLInputElement
+    )?.value;
     if (kodeBarang) {
       handleQRScan(kodeBarang);
       (document.getElementById("manual-code") as HTMLInputElement).value = "";
@@ -415,19 +424,6 @@ const BorrowFlow = () => {
     );
   };
 
-  // Filter data
-  const dataList = borrowerRole === "guru" ? teachers : students;
-  const filteredData = dataList.filter((item) => {
-    const label = borrowerRole === "guru" 
-      ? `${item.name} - ${item.nip}` 
-      : `${item.name} - ${(item as any).nis}`;
-    return label.toLowerCase().includes(searchNama.toLowerCase());
-  });
-
-  const filteredTeachers = teachers.filter((t) =>
-    `${t.name} - ${t.nip}`.toLowerCase().includes(searchGuru.toLowerCase())
-  );
-
   return (
     <PublicLayout>
       <div className="max-w-4xl mx-auto">
@@ -451,7 +447,9 @@ const BorrowFlow = () => {
                 <CardContent className="pt-6 pb-6 text-center">
                   <div className="animate-pulse space-y-2">
                     <div className="h-8 w-8 mx-auto bg-muted rounded-full"></div>
-                    <p className="text-sm text-muted-foreground">Memeriksa kamera...</p>
+                    <p className="text-sm text-muted-foreground">
+                      Memeriksa kamera...
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -484,7 +482,9 @@ const BorrowFlow = () => {
                       id="manual-code"
                       placeholder="Contoh: BRG-001"
                       className="mt-1"
-                      onKeyPress={(e) => e.key === "Enter" && handleManualCode()}
+                      onKeyPress={(e) =>
+                        e.key === "Enter" && handleManualCode()
+                      }
                     />
                     <p className="text-xs text-muted-foreground mt-1">
                       Lihat kode pada label barang
@@ -673,7 +673,6 @@ const BorrowFlow = () => {
                             role="combobox"
                             aria-expanded={openNamaPeminjam}
                             className="mt-1 w-full justify-between"
-                            disabled={loading}
                           >
                             {formData.nama_peminjam ? (
                               <BorrowerLabel
@@ -889,8 +888,7 @@ const BorrowFlow = () => {
                                       role="guru"
                                     />
                                   </CommandItem>
-                                );
-                              })}
+                                ))}
                             </div>
                           </Command>
                         </PopoverContent>
@@ -929,7 +927,8 @@ const BorrowFlow = () => {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Ambil foto yang jelas menampilkan wajah peminjam dan barang yang dipinjam
+                Ambil foto yang jelas menampilkan wajah peminjam dan barang yang
+                dipinjam
               </AlertDescription>
             </Alert>
             <CameraCapture
@@ -963,9 +962,16 @@ const BorrowFlow = () => {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="bg-primary/5 border-2 border-primary rounded-lg p-6 text-center">
-                <p className="text-sm text-muted-foreground mb-2">Kode Peminjaman</p>
-                <p className="text-3xl font-bold text-primary mb-4">{borrowingCode}</p>
-                <Alert variant="default" className="bg-warning/10 border-warning">
+                <p className="text-sm text-muted-foreground mb-2">
+                  Kode Peminjaman
+                </p>
+                <p className="text-3xl font-bold text-primary mb-4">
+                  {borrowingCode}
+                </p>
+                <Alert
+                  variant="default"
+                  className="bg-warning/10 border-warning"
+                >
                   <AlertCircle className="h-4 w-4 text-warning" />
                   <AlertDescription className="text-warning-foreground text-black">
                     <strong>Catatan:</strong> Simpan kode ini untuk pengembalian
@@ -980,7 +986,9 @@ const BorrowFlow = () => {
                 <div className="grid gap-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Peminjam:</span>
-                    <span className="font-medium">{formData.nama_peminjam}</span>
+                    <span className="font-medium">
+                      {formData.nama_peminjam}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Kontak:</span>
