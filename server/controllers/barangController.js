@@ -8,16 +8,19 @@ exports.getAllBarang = async (req, res) => {
         b.id_barang as id, 
         b.kode_barang, 
         b.nama_barang, 
-        b.jumlah_stok, 
-        b.jumlah_dipinjam, 
         b.foto_barang, 
-        b.notes, 
-        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.status,
+        b.deskripsi_barang,
+        b.no_serial_number,
+        b.id_jenis_barang,
+        jb.kode_jenis_barang as kode_jenis,
+        jb.nama_jenis_barang as nama_jenis,
         b.created_at 
       FROM barang b
       LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
       ORDER BY b.created_at DESC`
     );
+    
     res.json({
       success: true,
       data: result.rows,
@@ -41,11 +44,13 @@ exports.getBarangById = async (req, res) => {
         b.id_barang as id, 
         b.kode_barang, 
         b.nama_barang, 
-        b.jumlah_stok, 
-        b.jumlah_dipinjam, 
         b.foto_barang, 
-        b.notes, 
-        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.status,
+        b.deskripsi_barang,
+        b.no_serial_number,
+        b.id_jenis_barang,
+        jb.kode_jenis_barang as kode_jenis,
+        jb.nama_jenis_barang as nama_jenis,
         b.created_at 
       FROM barang b
       LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
@@ -56,7 +61,7 @@ exports.getBarangById = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Barang not found',
+        message: 'Barang tidak ditemukan',
       });
     }
 
@@ -83,11 +88,13 @@ exports.getBarangByKode = async (req, res) => {
         b.id_barang as id, 
         b.kode_barang, 
         b.nama_barang, 
-        b.jumlah_stok, 
-        b.jumlah_dipinjam, 
         b.foto_barang, 
-        b.notes, 
-        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.status,
+        b.deskripsi_barang,
+        b.no_serial_number,
+        b.id_jenis_barang,
+        jb.kode_jenis_barang as kode_jenis,
+        jb.nama_jenis_barang as nama_jenis,
         b.created_at 
       FROM barang b
       LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
@@ -98,7 +105,7 @@ exports.getBarangByKode = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Barang not found',
+        message: 'Barang tidak ditemukan',
       });
     }
 
@@ -120,21 +127,22 @@ exports.getBarangByKode = async (req, res) => {
 exports.getBarangByJenis = async (req, res) => {
   try {
     const { kode_jenis } = req.params;
-    // Query dengan JOIN untuk handle jika kode_jenis NULL, ambil dari jenis_barang
     const result = await db.query(
       `SELECT 
         b.id_barang as id, 
         b.kode_barang, 
         b.nama_barang, 
-        b.jumlah_stok, 
-        b.jumlah_dipinjam, 
         b.foto_barang, 
-        b.notes, 
-        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.status,
+        b.deskripsi_barang,
+        b.no_serial_number,
+        b.id_jenis_barang,
+        jb.kode_jenis_barang as kode_jenis,
+        jb.nama_jenis_barang as nama_jenis,
         b.created_at 
       FROM barang b
       LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
-      WHERE COALESCE(b.kode_jenis, jb.kode_jenis_barang) = $1 
+      WHERE jb.kode_jenis_barang = $1 
       ORDER BY b.nama_barang ASC`,
       [kode_jenis]
     );
@@ -156,33 +164,37 @@ exports.getBarangByJenis = async (req, res) => {
 // Create new barang
 exports.createBarang = async (req, res) => {
   try {
-    const { kode_barang, nama_barang, jumlah_stok, foto_barang, notes, kode_jenis } = req.body;
+    const { kode_barang, nama_barang, deskripsi_barang, foto_barang, no_serial_number, id_jenis_barang, status } = req.body;
 
-    if (!kode_barang || !nama_barang || !jumlah_stok) {
+    if (!kode_barang || !nama_barang) {
       return res.status(400).json({
         success: false,
-        message: 'Kode barang, nama, dan jumlah stok harus diisi',
+        message: 'Kode barang dan nama barang harus diisi',
       });
     }
 
     const result = await db.query(
-      'INSERT INTO barang (kode_barang, nama_barang, jumlah_stok, foto_barang, notes, kode_jenis) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id_barang',
-      [kode_barang, nama_barang, jumlah_stok, foto_barang || null, notes || null, kode_jenis || null]
+      `INSERT INTO barang (kode_barang, nama_barang, deskripsi_barang, foto_barang, no_serial_number, id_jenis_barang, status) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+       RETURNING id_barang`,
+      [kode_barang, nama_barang, deskripsi_barang || null, foto_barang || null, no_serial_number || null, id_jenis_barang || null, status || 'Tersedia']
     );
 
     const newId = result.rows[0].id_barang;
 
-    // Get the created item with id alias (include JOIN untuk kode_jenis)
+    // Get the created item with all fields
     const newItemResult = await db.query(
       `SELECT 
         b.id_barang as id, 
         b.kode_barang, 
         b.nama_barang, 
-        b.jumlah_stok, 
-        b.jumlah_dipinjam, 
         b.foto_barang, 
-        b.notes, 
-        COALESCE(b.kode_jenis, jb.kode_jenis_barang) as kode_jenis,
+        b.status,
+        b.deskripsi_barang,
+        b.no_serial_number,
+        b.id_jenis_barang,
+        jb.kode_jenis_barang as kode_jenis,
+        jb.nama_jenis_barang as nama_jenis,
         b.created_at 
       FROM barang b
       LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
@@ -215,23 +227,46 @@ exports.createBarang = async (req, res) => {
 exports.updateBarang = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nama_barang, jumlah_stok, foto_barang, notes, kode_jenis } = req.body;
+    const { nama_barang, deskripsi_barang, foto_barang, no_serial_number, id_jenis_barang, status } = req.body;
 
     const result = await db.query(
-      'UPDATE barang SET nama_barang = $1, jumlah_stok = $2, foto_barang = $3, notes = $4, kode_jenis = $5 WHERE id_barang = $6',
-      [nama_barang, jumlah_stok, foto_barang || null, notes || null, kode_jenis || null, id]
+      `UPDATE barang 
+       SET nama_barang = $1, deskripsi_barang = $2, foto_barang = $3, no_serial_number = $4, id_jenis_barang = $5, status = $6 
+       WHERE id_barang = $7`,
+      [nama_barang, deskripsi_barang || null, foto_barang || null, no_serial_number || null, id_jenis_barang || null, status, id]
     );
 
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Barang not found',
+        message: 'Barang tidak ditemukan',
       });
     }
+
+    // Get updated item
+    const updatedResult = await db.query(
+      `SELECT 
+        b.id_barang as id, 
+        b.kode_barang, 
+        b.nama_barang, 
+        b.foto_barang, 
+        b.status,
+        b.deskripsi_barang,
+        b.no_serial_number,
+        b.id_jenis_barang,
+        jb.kode_jenis_barang as kode_jenis,
+        jb.nama_jenis_barang as nama_jenis,
+        b.created_at 
+      FROM barang b
+      LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
+      WHERE b.id_barang = $1`,
+      [id]
+    );
 
     res.json({
       success: true,
       message: 'Barang updated successfully',
+      data: updatedResult.rows[0],
     });
   } catch (error) {
     console.error('Error updating barang:', error);
@@ -248,10 +283,11 @@ exports.deleteBarang = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if barang has active peminjaman
+    // Check if barang has active borrows in detail_peminjaman
     const borrowResult = await db.query(
-      'SELECT * FROM peminjaman WHERE id_barang = $1 AND status = $2',
-      [id, 'Dipinjam']
+      `SELECT * FROM detail_peminjaman 
+       WHERE id_barang = $1 AND status IN ('Dipinjam', 'Sebagian Dikembalikan')`,
+      [id]
     );
 
     if (borrowResult.rows.length > 0) {
@@ -269,7 +305,7 @@ exports.deleteBarang = async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Barang not found',
+        message: 'Barang tidak ditemukan',
       });
     }
 

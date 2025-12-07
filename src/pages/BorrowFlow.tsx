@@ -39,53 +39,117 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
-import { Item, BorrowingFormData } from "@/types";
-import { mockItems, mockTeachers, mockStudents, kelasOptions } from "@/lib/mockData";
-// Removed client-side code generation; server is source of truth
+import { Item } from "@/types";
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  barangAPI,
+  jenisBarangAPI,
+  guruAPI,
+  siswaAPI,
+  peminjamanAPI,
+} from "@/lib/api";
 
 type Step = "scan" | "form" | "photo" | "summary";
+
+interface BarangData extends Item {
+  id_jenis_barang?: number;
+  status?: string;
+}
+
+interface GuruData {
+  id: number;
+  nip: string;
+  name: string;
+  created_at: string;
+}
+
+interface SiswaData {
+  id: number;
+  nis: string;
+  name: string;
+  kelas?: string;
+  created_at: string;
+}
 
 const BorrowFlow = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<Step>("scan");
-  const [selectedItem, setSelectedItem] = useState<Item | null>(
-    location.state?.selectedItem || null
-  );
-  const [borrowerRole, setBorrowerRole] = useState<"guru" | "siswa">("guru");
-  const [scanMode, setScanMode] = useState<"qr" | "manual">("qr");
   const [cameraUnavailable, setCameraUnavailable] = useState<boolean>(false);
   const [cameraChecked, setCameraChecked] = useState<boolean>(false);
-  const [formData, setFormData] = useState<BorrowingFormData>({
+  const [scanMode, setScanMode] = useState<"qr" | "manual">("qr");
+
+  // Data from database
+  const [allBarang, setAllBarang] = useState<BarangData[]>([]);
+  const [allGuru, setAllGuru] = useState<GuruData[]>([]);
+  const [allSiswa, setAllSiswa] = useState<SiswaData[]>([]);
+  const [allKelas, setAllKelas] = useState<string[]>([]);
+
+  // Scan step state
+  const [selectedJenisCode, setSelectedJenisCode] = useState<string | null>(
+    null
+  );
+  const [availableItems, setAvailableItems] = useState<BarangData[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+  const [selectedItem, setSelectedItem] = useState<BarangData | null>(null);
+
+  // Form step state
+  const [borrowerRole, setBorrowerRole] = useState<"guru" | "siswa">("guru");
+  const [selectedKelas, setSelectedKelas] = useState<string>("");
+  const [filteredSiswa, setFilteredSiswa] = useState<SiswaData[]>([]);
+  const [formData, setFormData] = useState({
     nama_peminjam: "",
     kontak: "",
     keperluan: "",
     guru_pendamping: "",
-    id_barang: 0,
-    jumlah: 1,
   });
-  // For jenis (type) scan flows
-  const [selectedJenisCode, setSelectedJenisCode] = useState<string | null>(null);
-  const [availableItems, setAvailableItems] = useState<Item[]>([]);
-  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+
+  // Photo step state
   const [photoData, setPhotoData] = useState<string>("");
-  const [borrowingCode, setBorrowingCode] = useState<string>("");
-  const [openNamaPeminjam, setOpenNamaPeminjam] = useState(false);
-  const [searchNamaPeminjam, setSearchNamaPeminjam] = useState("");
+  const [signatureData, setSignatureData] = useState<string>("");
+
+  // Popover states
   const [openRolePicker, setOpenRolePicker] = useState(false);
-  const [openGuruPendamping, setOpenGuruPendamping] = useState(false);
-  const [searchGuruPendamping, setSearchGuruPendamping] = useState("");
-  const [selectedKelas, setSelectedKelas] = useState<string>("");
   const [openKelas, setOpenKelas] = useState(false);
   const [searchKelas, setSearchKelas] = useState("");
+  const [openNamaPeminjam, setOpenNamaPeminjam] = useState(false);
+  const [searchNamaPeminjam, setSearchNamaPeminjam] = useState("");
+  const [openGuruPendamping, setOpenGuruPendamping] = useState(false);
+  const [searchGuruPendamping, setSearchGuruPendamping] = useState("");
+
+  // Summary state
+  const [borrowingCode, setBorrowingCode] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Load data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [barangRes, guruRes, siswaRes, kelasRes] = await Promise.all([
+          barangAPI.getAll(),
+          guruAPI.getAll(),
+          siswaAPI.getAll(),
+          siswaAPI.getAllKelas(),
+        ]);
+
+        setAllBarang(barangRes);
+        setAllGuru(guruRes);
+        setAllSiswa(siswaRes);
+        setAllKelas(kelasRes);
+      } catch (error) {
+        console.error("Error loading data:", error);
+        toast.error("Gagal memuat data dari database");
+      }
+    };
+
+    loadData();
+  }, []);
 
   // Check camera availability on mount
   useEffect(() => {
     const checkCamera = async () => {
       try {
-        // Check if mediaDevices is supported
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           setCameraUnavailable(true);
           setScanMode("manual");
@@ -93,16 +157,12 @@ const BorrowFlow = () => {
           return;
         }
 
-        // Try to check camera permission
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
         });
-        // If successful, stop the stream immediately
         stream.getTracks().forEach((track) => track.stop());
         setCameraChecked(true);
-        // Keep scanMode as "qr" if camera is available
-      } catch (err: any) {
-        // Camera not available or permission denied
+      } catch (err) {
         console.log("Camera not available:", err);
         setCameraUnavailable(true);
         setScanMode("manual");
@@ -115,43 +175,59 @@ const BorrowFlow = () => {
     }
   }, [cameraChecked]);
 
+  // Update filtered siswa when kelas changes
   useEffect(() => {
-    if (selectedItem) {
-      setCurrentStep("form");
-      setFormData((prev) => ({ ...prev, id_barang: selectedItem.id }));
+    if (selectedKelas && borrowerRole === "siswa") {
+      const filtered = allSiswa.filter((s) => s.kelas === selectedKelas);
+      setFilteredSiswa(filtered);
+      setFormData((prev) => ({ ...prev, nama_peminjam: "" }));
     }
-  }, [selectedItem]);
+  }, [selectedKelas, borrowerRole, allSiswa]);
 
   const handleQRScan = async (decodedText: string) => {
     try {
-      // First check mockItems for kode_jenis match (jenis scan)
-      const matchesJenis = mockItems.filter((i) => i.kode_jenis === decodedText);
-      if (matchesJenis.length > 0) {
-        setSelectedJenisCode(decodedText);
-        setAvailableItems(matchesJenis);
-        setSelectedItem(null);
-        setSelectedItemIds([]);
-        setCurrentStep("form");
-        return;
+      // Check if it's a jenis code
+      const jenisBarang = allBarang.find((b) => b.kode_jenis === decodedText);
+
+      if (jenisBarang) {
+        // Scan jenis - get all barang with this jenis code
+        const itemsOfJenis = allBarang.filter(
+          (b) => b.kode_jenis === decodedText && b.status === "Tersedia"
+        );
+        if (itemsOfJenis.length > 0) {
+          setSelectedJenisCode(decodedText);
+          setAvailableItems(itemsOfJenis);
+          setSelectedItem(null);
+          setSelectedItemIds([]);
+          setCurrentStep("form");
+          toast.success(
+            `${itemsOfJenis.length} barang tersedia untuk jenis ini`
+          );
+          return;
+        } else {
+          toast.error("Tidak ada barang tersedia untuk jenis ini");
+          return;
+        }
       }
 
-      // DUMMY MODE: Check mockItems for individual item kode match instead of API call
-      const matchedItem = mockItems.find(
-        (i) => i.kode_barang === decodedText || i.kode_barang.includes(decodedText)
-      );
-      
-      if (matchedItem) {
-        const available = matchedItem.jumlah_stok - matchedItem.jumlah_dipinjam;
-        if (available > 0) {
-          setSelectedItem(matchedItem);
-          setFormData((prev) => ({ ...prev, id_barang: matchedItem.id }));
-          setSelectedJenisCode(matchedItem.kode_jenis || null);
-          setCurrentStep("form");
-        } else {
-          toast.error("Maaf, barang tidak tersedia saat ini");
+      // Check if it's individual barang code
+      const barang = allBarang.find((b) => b.kode_barang === decodedText);
+
+      if (barang) {
+        if (barang.status !== "Tersedia") {
+          toast.error(`Barang tidak tersedia (Status: ${barang.status})`);
+          return;
         }
+
+        setSelectedItem(barang);
+        setSelectedJenisCode(barang.kode_jenis || null);
+        setAvailableItems([]);
+        setSelectedItemIds([]);
+        setFormData((prev) => ({}));
+        setCurrentStep("form");
+        toast.success(`Barang "${barang.nama_barang}" dipilih`);
       } else {
-        toast.error("QR Code tidak valid atau barang tidak ditemukan (Dummy Mode)");
+        toast.error("QR Code tidak valid atau barang tidak ditemukan");
       }
     } catch (error) {
       console.error("Error in QR scan:", error);
@@ -165,6 +241,7 @@ const BorrowFlow = () => {
     )?.value;
     if (kodeBarang) {
       handleQRScan(kodeBarang);
+      (document.getElementById("manual-code") as HTMLInputElement).value = "";
     } else {
       toast.error("Masukkan kode barang");
     }
@@ -172,39 +249,31 @@ const BorrowFlow = () => {
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Basic validation
+
+    // Validation
     if (!formData.nama_peminjam || !formData.kontak || !formData.keperluan) {
       toast.error("Mohon lengkapi semua field");
       return;
     }
 
-    // If borrower is siswa, require guru pendamping
     if (borrowerRole === "siswa" && !formData.guru_pendamping) {
-      toast.error("Pilih guru pendamping untuk siswa");
+      toast.error("Pilih guru pendamping");
       return;
     }
 
-    // If borrower is siswa, require kelas
     if (borrowerRole === "siswa" && !selectedKelas) {
-      toast.error("Pilih kelas untuk siswa");
+      toast.error("Pilih kelas");
       return;
     }
 
-    // If user selected specific items from a jenis, ensure at least one selected
     if (availableItems.length > 0) {
       if (selectedItemIds.length === 0) {
-        toast.error("Pilih minimal satu barang dari daftar");
+        toast.error("Pilih minimal satu barang");
         return;
       }
     } else {
-      if (!selectedItem || formData.jumlah <= 0) {
-        toast.error("Data barang tidak valid");
-        return;
-      }
-
-      const available = selectedItem.jumlah_stok - selectedItem.jumlah_dipinjam;
-      if (formData.jumlah > available) {
-        toast.error(`Stok tidak mencukupi. Tersedia: ${available}`);
+      if (!selectedItem) {
+        toast.error("Barang belum dipilih");
         return;
       }
     }
@@ -214,33 +283,67 @@ const BorrowFlow = () => {
 
   const handlePhotoCapture = async (imageData: string) => {
     setPhotoData(imageData);
+    // Immediately submit to database after photo capture
+    await handleSubmitBorrowing(imageData);
+  };
 
-    // Prepare list of item ids to create borrowings for
-    let itemIdsToBorrow: number[] = [];
-    if (availableItems.length > 0) {
-      itemIdsToBorrow = selectedItemIds.slice();
-    } else if (selectedItem) {
-      itemIdsToBorrow = [selectedItem.id];
-    } else {
-      toast.error("Barang belum dipilih");
-      return;
-    }
-
+  const handleSubmitBorrowing = async (photoDataToSubmit: string) => {
+    setIsSubmitting(true);
     try {
-      // DUMMY MODE: Skip API calls and generate single code for all items
-      // When backend is ready, this will call API and return single code with multiple detail records
-      const dummyCode = `PMJ-${Date.now()}`;
-      
-      setBorrowingCode(dummyCode);
+      // Prepare items array
+      let itemsToBorrow: Array<{ id_barang: number }> = [];
+
+      if (availableItems.length > 0) {
+        itemsToBorrow = selectedItemIds.map((id) => ({ id_barang: id }));
+      } else if (selectedItem) {
+        itemsToBorrow = [{ id_barang: selectedItem.id }];
+      }
+
+      if (itemsToBorrow.length === 0) {
+        toast.error("Tidak ada barang yang dipilih");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Use provided photoData or fallback to state
+      const fotoCredentialUrl = photoDataToSubmit || photoData || null;
+
+      // Create peminjaman in database
+      const result = await peminjamanAPI.create({
+        nama_peminjam: formData.nama_peminjam,
+        kontak: formData.kontak,
+        keperluan: formData.keperluan,
+        guru_pendamping:
+          borrowerRole === "guru"
+            ? formData.guru_pendamping
+            : formData.guru_pendamping,
+        foto_credential: fotoCredentialUrl,
+        signature: signatureData || null,
+        items: itemsToBorrow,
+      });
+
+      // Extract kode_peminjaman from result
+      const kodePeminjaman = result?.kode_peminjaman || result?.id_peminjaman;
+
+      if (!kodePeminjaman) {
+        throw new Error("Kode peminjaman tidak diterima dari server");
+      }
+
+      setBorrowingCode(kodePeminjaman);
+      // Move to summary to show success
       setCurrentStep("summary");
-      toast.success("Peminjaman berhasil dibuat! (Dummy Mode)");
+      toast.success(`Peminjaman berhasil! Kode: ${kodePeminjaman}`);
     } catch (error) {
-      console.error("Error in dummy borrowing:", error);
-      toast.error("Gagal memproses peminjaman");
+      console.error("Error creating peminjaman:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Gagal membuat peminjaman"
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleComplete = async () => {
+  const handleCompleteAndClose = () => {
     if (!borrowingCode) {
       toast.error("Kode peminjaman belum tersedia");
       return;
@@ -313,7 +416,7 @@ const BorrowFlow = () => {
 
         {renderStepIndicator()}
 
-        {/* Step: Scan/Select Item */}
+        {/* Step: Scan */}
         {currentStep === "scan" && (
           <div className="space-y-6">
             {!cameraChecked ? (
@@ -346,8 +449,8 @@ const BorrowFlow = () => {
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Kamera tidak tersedia atau akses ditolak. Silakan input
-                      kode barang secara manual.
+                      Kamera tidak tersedia. Silakan input kode barang secara
+                      manual.
                     </AlertDescription>
                   </Alert>
                   <div>
@@ -374,164 +477,165 @@ const BorrowFlow = () => {
         )}
 
         {/* Step: Form */}
-        {currentStep === "form" && (selectedItem || availableItems.length > 0) && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Data Peminjaman</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleFormSubmit} className="space-y-4">
-                {/* Selected Item / Jenis Info */}
-                <div className="bg-accent/50 p-4 rounded-lg mb-4">
-                  {availableItems.length > 0 ? (
-                    <div>
-                      <p className="font-semibold">Jenis: {selectedJenisCode}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Pilih barang dari daftar jenis untuk dipinjam
-                      </p>
-                      <div className="mt-3 grid gap-2">
-                        {availableItems.map((it) => (
-                          <label key={it.id} className="flex items-center gap-3 p-2 rounded border">
-                            <input
-                              type="checkbox"
-                              checked={selectedItemIds.includes(it.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) setSelectedItemIds((s) => [...s, it.id]);
-                                else setSelectedItemIds((s) => s.filter((id) => id !== it.id));
-                              }}
-                            />
-                            {it.foto_barang && (
-                              <img src={it.foto_barang} alt={it.nama_barang} className="w-12 h-12 object-cover rounded" />
-                            )}
-                            <div className="flex-1">
-                              <div className="font-medium">{it.nama_barang}</div>
-                              <div className="text-xs text-muted-foreground">Kode: {it.kode_barang} — Tersedia: {it.jumlah_stok - it.jumlah_dipinjam}</div>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      {selectedItem?.foto_barang && (
-                        <img src={selectedItem!.foto_barang} alt={selectedItem!.nama_barang} className="w-16 h-16 object-cover rounded" />
-                      )}
+        {currentStep === "form" &&
+          (selectedItem || availableItems.length > 0) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Data Peminjaman</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleFormSubmit} className="space-y-4">
+                  {/* Item Info */}
+                  <div className="bg-accent/50 p-4 rounded-lg mb-4">
+                    {availableItems.length > 0 ? (
                       <div>
-                        <p className="font-semibold">{selectedItem?.nama_barang}</p>
-                        <p className="text-sm text-muted-foreground">Kode: {selectedItem?.kode_barang}</p>
-                        <p className="text-sm text-muted-foreground">Tersedia: {selectedItem && (selectedItem.jumlah_stok - selectedItem.jumlah_dipinjam)}</p>
+                        <p className="font-semibold">
+                          Jenis: {selectedJenisCode}
+                        </p>
+                        <p className="text-sm text-muted-foreground mb-3">
+                          Pilih barang dari daftar
+                        </p>
+                        <div className="mt-3 grid gap-2">
+                          {availableItems.map((item) => (
+                            <label
+                              key={item.id}
+                              className="flex items-center gap-3 p-2 rounded border cursor-pointer hover:bg-accent"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedItemIds.includes(item.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedItemIds((s) => [...s, item.id]);
+                                  } else {
+                                    setSelectedItemIds((s) =>
+                                      s.filter((id) => id !== item.id)
+                                    );
+                                  }
+                                }}
+                              />
+                              {item.foto_barang && (
+                                <img
+                                  src={item.foto_barang}
+                                  alt={item.nama_barang}
+                                  className="w-12 h-12 object-cover rounded"
+                                />
+                              )}
+                              <div className="flex-1">
+                                <div className="font-medium">
+                                  {item.nama_barang}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Kode: {item.kode_barang}
+                                </div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="role">Meminjam sebagai *</Label>
-                    <Popover open={openRolePicker} onOpenChange={setOpenRolePicker}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          id="role"
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openRolePicker}
-                          className="mt-1 w-full justify-between"
-                        >
-                          {borrowerRole === "guru" ? "Guru" : "Siswa"}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
-                        <Command>
-                          <div className="max-h-44 overflow-y-auto">
-                            <CommandItem
-                              value="guru"
-                              onSelect={(v) => {
-                                setBorrowerRole("guru");
-                                setOpenRolePicker(false);
-                                // clear nama peminjam when role changes
-                                setFormData({ ...formData, nama_peminjam: "", guru_pendamping: "" });
-                                setSelectedKelas("");
-                                setSearchNamaPeminjam("");
-                              }}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", borrowerRole === "guru" ? "opacity-100" : "opacity-0")} />
-                              Guru
-                            </CommandItem>
-                            <CommandItem
-                              value="siswa"
-                              onSelect={(v) => {
-                                setBorrowerRole("siswa");
-                                setOpenRolePicker(false);
-                                setFormData({ ...formData, nama_peminjam: "", guru_pendamping: "" });
-                                setSelectedKelas("");
-                                setSearchNamaPeminjam("");
-                              }}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", borrowerRole === "siswa" ? "opacity-100" : "opacity-0")} />
-                              Siswa
-                            </CommandItem>
-                          </div>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        {selectedItem?.foto_barang && (
+                          <img
+                            src={selectedItem.foto_barang}
+                            alt={selectedItem.nama_barang}
+                            className="w-16 h-16 object-cover rounded"
+                          />
+                        )}
+                        <div>
+                          <p className="font-semibold">
+                            {selectedItem?.nama_barang}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Kode: {selectedItem?.kode_barang}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {borrowerRole === "siswa" && (
+                  {/* Role Selection */}
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="kelas">Kelas *</Label>
-                      <Popover open={openKelas} onOpenChange={setOpenKelas}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            id="kelas"
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={openKelas}
-                            className="mt-1 w-full justify-between"
-                          >
-                            {selectedKelas || "Pilih Kelas..."}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-full p-0">
-                          <Command>
-                            <CommandInput
-                              placeholder="Cari kelas..."
-                              value={searchKelas}
-                              onValueChange={setSearchKelas}
-                            />
-                            <CommandEmpty>Tidak ada kelas ditemukan</CommandEmpty>
-                            <div className="max-h-44 overflow-y-auto">
-                              {kelasOptions
-                                .filter((k) => k.toLowerCase().includes(searchKelas.toLowerCase()))
-                                .map((k) => (
-                                  <CommandItem
-                                    key={k}
-                                    value={k}
-                                    onSelect={(currentValue) => {
-                                      setSelectedKelas(currentValue === selectedKelas ? "" : currentValue);
-                                      setOpenKelas(false);
-                                      setSearchKelas("");
-                                      // Reset nama_peminjam when kelas changes
-                                      setFormData({ ...formData, nama_peminjam: "" });
-                                      setSearchNamaPeminjam("");
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        selectedKelas === k ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    {k}
-                                  </CommandItem>
-                                ))}
-                            </div>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
+                      <Label htmlFor="role">Meminjam sebagai *</Label>
+                      <Select
+                        value={borrowerRole}
+                        onValueChange={(value: any) => {
+                          setBorrowerRole(value);
+                          setFormData({
+                            ...formData,
+                            nama_peminjam: "",
+                            guru_pendamping: "",
+                          });
+                          setSelectedKelas("");
+                        }}
+                      >
+                        <SelectTrigger className="mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="guru">Guru</SelectItem>
+                          <SelectItem value="siswa">Siswa</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
+
+                    {borrowerRole === "siswa" && (
+                      <div>
+                        <Label htmlFor="kelas">Kelas *</Label>
+                        <Popover open={openKelas} onOpenChange={setOpenKelas}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              className="mt-1 w-full justify-between"
+                            >
+                              {selectedKelas || "Pilih Kelas..."}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-full p-0">
+                            <Command>
+                              <CommandInput
+                                placeholder="Cari kelas..."
+                                value={searchKelas}
+                                onValueChange={setSearchKelas}
+                              />
+                              <CommandEmpty>Tidak ada kelas</CommandEmpty>
+                              <div className="max-h-44 overflow-y-auto">
+                                {allKelas
+                                  .filter((k) =>
+                                    k
+                                      .toLowerCase()
+                                      .includes(searchKelas.toLowerCase())
+                                  )
+                                  .map((k) => (
+                                    <CommandItem
+                                      key={k}
+                                      value={k}
+                                      onSelect={() => {
+                                        setSelectedKelas(k);
+                                        setOpenKelas(false);
+                                        setSearchKelas("");
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          selectedKelas === k
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                        )}
+                                      />
+                                      {k}
+                                    </CommandItem>
+                                  ))}
+                              </div>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    )}
 
                   <div>
                     <Label htmlFor="nama">Nama Peminjam *</Label>
@@ -637,30 +741,31 @@ const BorrowFlow = () => {
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="keperluan">Keperluan *</Label>
-                  <Textarea
-                    id="keperluan"
-                    value={formData.keperluan}
-                    onChange={(e) =>
-                      setFormData({ ...formData, keperluan: e.target.value })
-                    }
-                    placeholder="Contoh: Praktikum Jaringan Komputer"
-                    required
-                  />
-                </div>
+                  <div>
+                    <Label htmlFor="keperluan">Keperluan *</Label>
+                    <Textarea
+                      id="keperluan"
+                      value={formData.keperluan}
+                      onChange={(e) =>
+                        setFormData({ ...formData, keperluan: e.target.value })
+                      }
+                      placeholder="Contoh: Praktikum Jaringan Komputer"
+                      className="mt-1"
+                      required
+                    />
+                  </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
                   {borrowerRole === "siswa" && (
                     <div>
                       <Label htmlFor="guru">Guru Pendamping *</Label>
-                      <Popover open={openGuruPendamping} onOpenChange={setOpenGuruPendamping}>
+                      <Popover
+                        open={openGuruPendamping}
+                        onOpenChange={setOpenGuruPendamping}
+                      >
                         <PopoverTrigger asChild>
                           <Button
-                            id="guru"
                             variant="outline"
                             role="combobox"
-                            aria-expanded={openGuruPendamping}
                             className="mt-1 w-full justify-between"
                           >
                             {formData.guru_pendamping ? (
@@ -674,24 +779,24 @@ const BorrowFlow = () => {
                         <PopoverContent className="w-full p-0">
                           <Command>
                             <CommandInput
-                              placeholder="Cari guru pendamping..."
+                              placeholder="Cari guru..."
                               value={searchGuruPendamping}
                               onValueChange={setSearchGuruPendamping}
                             />
-                            <CommandEmpty>Tidak ada guru ditemukan</CommandEmpty>
+                            <CommandEmpty>Tidak ada guru</CommandEmpty>
                             <div className="max-h-64 overflow-y-auto">
                               {mockTeachers
                                 .filter((t) =>
                                   formatTeacherDisplay(t).toLowerCase().includes(searchGuruPendamping.toLowerCase())
                                 )
-                                .map((t) => (
+                                .map((g) => (
                                   <CommandItem
                                     key={t.nip}
                                     value={formatTeacherDisplay(t)}
                                     onSelect={(currentValue) => {
                                       setFormData({
                                         ...formData,
-                                        guru_pendamping: currentValue === formData.guru_pendamping ? "" : currentValue,
+                                        guru_pendamping: value,
                                       });
                                       setOpenGuruPendamping(false);
                                       setSearchGuruPendamping("");
@@ -713,53 +818,29 @@ const BorrowFlow = () => {
                     </div>
                   )}
 
-                  <div>
-                    {/* If picking specific items from a jenis, jumlah is derived from selections */}
-                    {availableItems.length > 0 ? (
-                      <div>
-                        <Label>Items dipilih:</Label>
-                        <p className="text-sm text-muted-foreground">{selectedItemIds.length} item terpilih</p>
-                      </div>
-                    ) : (
-                      <div>
-                        <Label htmlFor="jumlah">Jumlah Barang *</Label>
-                        <Input
-                          id="jumlah"
-                          type="number"
-                          min="1"
-                          max={selectedItem ? selectedItem.jumlah_stok - selectedItem.jumlah_dipinjam : 1}
-                          value={formData.jumlah}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              jumlah: parseInt(e.target.value),
-                            })
-                          }
-                          required
-                        />
-                      </div>
-                    )}
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setCurrentStep("scan");
+                        setSelectedItem(null);
+                        setAvailableItems([]);
+                        setSelectedItemIds([]);
+                      }}
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Kembali
+                    </Button>
+                    <Button type="submit" className="flex-1">
+                      Selanjutnya
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
                   </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setCurrentStep("scan")}
-                  >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Kembali
-                  </Button>
-                  <Button type="submit" className="flex-1">
-                    Selanjutnya
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        )}
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
         {/* Step: Photo */}
         {currentStep === "photo" && (
@@ -814,12 +895,13 @@ const BorrowFlow = () => {
                 >
                   <AlertCircle className="h-4 w-4 text-warning" />
                   <AlertDescription className="text-warning-foreground text-black">
-                    <strong>Catatan:</strong> Kode ini hanya penanda internal.
+                    <strong>Catatan:</strong> Simpan kode ini untuk pengembalian
+                    barang.
                   </AlertDescription>
                 </Alert>
               </div>
 
-              {/* Peminjam Info */}
+              {/* Borrower Info */}
               <div className="space-y-3">
                 <h4 className="font-semibold">Data Peminjam:</h4>
                 <div className="grid gap-2 text-sm">
@@ -850,39 +932,62 @@ const BorrowFlow = () => {
                 </div>
               </div>
 
-              {/* Borrowing Details Table */}
+              {/* Barang Details */}
               <div className="space-y-3">
                 <h4 className="font-semibold">Detail Barang Dipinjam:</h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
                       <tr className="border-b-2 border-gray-300">
-                        <th className="text-left py-2 px-2 font-semibold">No</th>
-                        <th className="text-left py-2 px-2 font-semibold">Nama Barang</th>
-                        <th className="text-left py-2 px-2 font-semibold">Kode</th>
-                        <th className="text-center py-2 px-2 font-semibold">Jumlah</th>
+                        <th className="text-left py-2 px-2 font-semibold">
+                          No
+                        </th>
+                        <th className="text-left py-2 px-2 font-semibold">
+                          Nama Barang
+                        </th>
+                        <th className="text-left py-2 px-2 font-semibold">
+                          Kode
+                        </th>
+                        <th className="text-center py-2 px-2 font-semibold">
+                          Jumlah
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {availableItems.length > 0 ? (
-                        availableItems
-                          .filter((it) => selectedItemIds.includes(it.id))
-                          .map((it, index) => (
-                            <tr key={it.id} className="border-b border-gray-200 hover:bg-gray-50">
-                              <td className="py-2 px-2">{index + 1}</td>
-                              <td className="py-2 px-2 font-medium">{it.nama_barang}</td>
-                              <td className="py-2 px-2 text-gray-600">{it.kode_barang}</td>
-                              <td className="py-2 px-2 text-center font-medium">1</td>
+                      {availableItems.length > 0
+                        ? availableItems
+                            .filter((item) => selectedItemIds.includes(item.id))
+                            .map((item, index) => (
+                              <tr
+                                key={item.id}
+                                className="border-b border-gray-200 hover:bg-gray-50"
+                              >
+                                <td className="py-2 px-2">{index + 1}</td>
+                                <td className="py-2 px-2 font-medium">
+                                  {item.nama_barang}
+                                </td>
+                                <td className="py-2 px-2 text-gray-600">
+                                  {item.kode_barang}
+                                </td>
+                                <td className="py-2 px-2 text-center font-medium">
+                                  1
+                                </td>
+                              </tr>
+                            ))
+                        : selectedItem && (
+                            <tr className="border-b border-gray-200 hover:bg-gray-50">
+                              <td className="py-2 px-2">1</td>
+                              <td className="py-2 px-2 font-medium">
+                                {selectedItem.nama_barang}
+                              </td>
+                              <td className="py-2 px-2 text-gray-600">
+                                {selectedItem.kode_barang}
+                              </td>
+                              <td className="py-2 px-2 text-center font-medium">
+                                1
+                              </td>
                             </tr>
-                          ))
-                      ) : (
-                        <tr className="border-b border-gray-200 hover:bg-gray-50">
-                          <td className="py-2 px-2">1</td>
-                          <td className="py-2 px-2 font-medium">{selectedItem?.nama_barang}</td>
-                          <td className="py-2 px-2 text-gray-600">{selectedItem?.kode_barang}</td>
-                          <td className="py-2 px-2 text-center font-medium">{formData.jumlah}</td>
-                        </tr>
-                      )}
+                          )}
                     </tbody>
                   </table>
                 </div>
@@ -900,9 +1005,14 @@ const BorrowFlow = () => {
                 </div>
               )}
 
-              <Button onClick={handleComplete} className="w-full" size="lg">
+              <Button
+                onClick={handleCompleteAndClose}
+                className="w-full"
+                size="lg"
+                disabled={isSubmitting}
+              >
                 <CheckCircle className="h-5 w-5 mr-2" />
-                Selesai
+                {isSubmitting ? "Menyimpan..." : "Selesai"}
               </Button>
             </CardContent>
           </Card>

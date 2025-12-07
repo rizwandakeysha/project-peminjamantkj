@@ -2,8 +2,14 @@ const express = require('express');
 const router = express.Router();
 const siswaController = require('../controllers/siswaController');
 
+// GET all kelas (MUST BE FIRST - before any other /:param routes)
+router.get('/all-kelas', siswaController.getAllKelas);
+
 // GET all siswa
 router.get('/', siswaController.getAllSiswa);
+
+// GET siswa by kelas
+router.get('/kelas/:kelas', siswaController.getSiswaByKelas);
 
 // GET siswa by NIS (must be before /:id route)
 router.get('/nis/:nis', siswaController.getSiswaByNis);
@@ -21,4 +27,3 @@ router.put('/:id', siswaController.updateSiswa);
 router.delete('/:id', siswaController.deleteSiswa);
 
 module.exports = router;
-

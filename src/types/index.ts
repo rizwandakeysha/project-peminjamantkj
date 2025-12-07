@@ -4,12 +4,13 @@ export interface Item {
   id: number;
   kode_barang: string;
   nama_barang: string;
-  jumlah_stok: number;
-  jumlah_dipinjam: number;
+  status: 'Tersedia' | 'Dipinjam' | 'Rusak' | 'Hilang';
+  deskripsi_barang?: string;
+  no_serial_number?: string;
   foto_barang?: string;
-  notes?: string;
-  // Optional jenis kode to link item to a jenis (type)
+  id_jenis_barang?: number;
   kode_jenis?: string;
+  nama_jenis?: string;
   created_at: string;
 }
 

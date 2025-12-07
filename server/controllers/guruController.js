@@ -4,7 +4,7 @@ const db = require('../config/database');
 exports.getAllGuru = async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT id_guru as id, guru_nip as nip, nama_guru as name, created_at FROM guru ORDER BY nama_guru ASC'
+      'SELECT id as id, nip, nama_guru as name, created_at FROM guru ORDER BY nama_guru ASC'
     );
     res.json({
       success: true,
@@ -25,14 +25,14 @@ exports.getGuruById = async (req, res) => {
   try {
     const { id } = req.params;
     const result = await db.query(
-      'SELECT id_guru as id, guru_nip as nip, nama_guru as name, created_at FROM guru WHERE id_guru = $1',
+      'SELECT id as id, nip, nama_guru as name, created_at FROM guru WHERE id = $1',
       [id]
     );
     
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Guru not found',
+        message: 'Guru tidak ditemukan',
       });
     }
 
@@ -55,14 +55,14 @@ exports.getGuruByNip = async (req, res) => {
   try {
     const { nip } = req.params;
     const result = await db.query(
-      'SELECT id_guru as id, guru_nip as nip, nama_guru as name, created_at FROM guru WHERE guru_nip = $1',
+      'SELECT id as id, nip, nama_guru as name, created_at FROM guru WHERE nip = $1',
       [nip]
     );
     
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Guru not found',
+        message: 'Guru tidak ditemukan',
       });
     }
 

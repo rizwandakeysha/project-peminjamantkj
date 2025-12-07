@@ -10,6 +10,7 @@ dotenv.config();
 
 // Import routes
 const barangRoutes = require('./routes/barangRoutes');
+const jenisBarangRoutes = require('./routes/jenisBarangRoutes');
 const peminjamanRoutes = require('./routes/peminjamanRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
@@ -82,6 +83,7 @@ app.get('/api/test-cors', (req, res) => {
 
 // API Routes
 app.use('/api/barang', barangRoutes);
+app.use('/api/jenis-barang', jenisBarangRoutes);
 app.use('/api/peminjaman', peminjamanRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);

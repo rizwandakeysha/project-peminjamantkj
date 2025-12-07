@@ -91,8 +91,8 @@ export const barangAPI = {
 // Peminjaman API
 export const peminjamanAPI = {
   // Get all borrowings
-  getAll: async (status?: "Dipinjam" | "Dikembalikan"): Promise<Borrowing[]> => {
-    const queryParams = status ? `?status=${status}` : "";
+  getAll: async (status?: "Dipinjam" | "Sebagian Dikembalikan" | "Selesai"): Promise<Borrowing[]> => {
+    const queryParams = status ? `?status_transaksi=${status}` : "";
     const result = await fetchAPI<Borrowing[]>(`/peminjaman${queryParams}`);
     return result.data || [];
   },
@@ -103,15 +103,15 @@ export const peminjamanAPI = {
     return result.data || null;
   },
 
-  // Create new borrowing
+  // Create new borrowing with multiple items (NEW STRUCTURE)
   create: async (data: {
-    id_barang: number;
     nama_peminjam: string;
     kontak?: string | null;
     keperluan: string;
-    guru_pendamping: string;
-    jumlah: number;
+    guru_pendamping?: string | null;
     foto_credential?: string | null;
+    signature?: string | null;
+    items: Array<{ id_barang: number }>;
   }): Promise<any> => {
     const result = await fetchAPI<any>("/peminjaman", {
       method: "POST",
@@ -120,11 +120,11 @@ export const peminjamanAPI = {
     return result.data!;
   },
 
-  // Return item
-  return: async (kode_peminjaman: string, foto_verifikasi?: string): Promise<void> => {
+  // Return item (update detail_peminjaman)
+  return: async (kode_peminjaman: string, id_detail_peminjaman: number, foto_bukti_kembali?: string | null): Promise<void> => {
     await fetchAPI(`/peminjaman/return/${kode_peminjaman}`, {
       method: "PUT",
-      body: JSON.stringify({ foto_verifikasi }),
+      body: JSON.stringify({ id_detail_peminjaman, foto_bukti_kembali }),
     });
   },
 
@@ -205,6 +205,27 @@ export const uploadAPI = {
   },
 };
 
+// Jenis Barang API
+export const jenisBarangAPI = {
+  // Get all jenis barang
+  getAll: async (): Promise<Array<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string }>> => {
+    const result = await fetchAPI<Array<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string }>>("/jenis-barang");
+    return result.data || [];
+  },
+
+  // Get jenis barang by ID
+  getById: async (id: number): Promise<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string } | null> => {
+    const result = await fetchAPI<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string }>(`/jenis-barang/${id}`);
+    return result.data || null;
+  },
+
+  // Get jenis barang by kode
+  getByKode: async (kode: string): Promise<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string } | null> => {
+    const result = await fetchAPI<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string }>(`/jenis-barang/kode/${kode}`);
+    return result.data || null;
+  },
+};
+
 // Guru API
 export const guruAPI = {
   // Get all teachers
@@ -229,20 +250,32 @@ export const guruAPI = {
 // Siswa API
 export const siswaAPI = {
   // Get all students
-  getAll: async (): Promise<{ id: number; nis: string; name: string; created_at: string }[]> => {
-    const result = await fetchAPI<{ id: number; nis: string; name: string; created_at: string }[]>("/siswa");
+  getAll: async (): Promise<{ id: number; nis: string; name: string; kelas?: string; created_at: string }[]> => {
+    const result = await fetchAPI<{ id: number; nis: string; name: string; kelas?: string; created_at: string }[]>("/siswa");
+    return result.data || [];
+  },
+
+  // Get all kelas
+  getAllKelas: async (): Promise<string[]> => {
+    const result = await fetchAPI<string[]>("/siswa/all-kelas");
+    return result.data || [];
+  },
+
+  // Get students by kelas
+  getByKelas: async (kelas: string): Promise<{ id: number; nis: string; name: string; kelas: string; created_at: string }[]> => {
+    const result = await fetchAPI<{ id: number; nis: string; name: string; kelas: string; created_at: string }[]>(`/siswa/kelas/${kelas}`);
     return result.data || [];
   },
 
   // Get student by ID
-  getById: async (id: number): Promise<{ id: number; nis: string; name: string; created_at: string } | null> => {
-    const result = await fetchAPI<{ id: number; nis: string; name: string; created_at: string }>(`/siswa/${id}`);
+  getById: async (id: number): Promise<{ id: number; nis: string; name: string; kelas?: string; created_at: string } | null> => {
+    const result = await fetchAPI<{ id: number; nis: string; name: string; kelas?: string; created_at: string }>(`/siswa/${id}`);
     return result.data || null;
   },
 
   // Get student by NIS
-  getByNis: async (nis: string): Promise<{ id: number; nis: string; name: string; created_at: string } | null> => {
-    const result = await fetchAPI<{ id: number; nis: string; name: string; created_at: string }>(`/siswa/nis/${nis}`);
+  getByNis: async (nis: string): Promise<{ id: number; nis: string; name: string; kelas?: string; created_at: string } | null> => {
+    const result = await fetchAPI<{ id: number; nis: string; name: string; kelas?: string; created_at: string }>(`/siswa/nis/${nis}`);
     return result.data || null;
   },
 };
