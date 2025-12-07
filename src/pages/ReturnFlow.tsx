@@ -8,12 +8,24 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, CheckCircle, AlertCircle, Barcode } from "lucide-react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { Item } from "@/types";
-import { mockItems } from "@/lib/mockData";
+import { Item, Borrowing } from "@/types";
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { barangAPI, peminjamanAPI } from "@/lib/api";
 
 type Step = "scan" | "verify" | "complete";
+
+interface DetailPeminjaman {
+  id_detail_peminjaman: number;
+  id_barang: number;
+  status: "Dipinjam" | "Dikembalikan" | "Rusak" | "Hilang";
+  tanggal_kembali?: string;
+  foto_bukti_kembali?: string;
+}
+
+interface BarangDetail extends Item {
+  detail_peminjaman?: DetailPeminjaman;
+}
 
 const ReturnFlow = () => {
   const navigate = useNavigate();
@@ -27,8 +39,12 @@ const ReturnFlow = () => {
   const [scannerActive, setScannerActive] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>("scan");
   const [scannedBarcode, setScannedBarcode] = useState("");
-  const [foundItem, setFoundItem] = useState<Item | null>(null);
+  const [foundItem, setFoundItem] = useState<BarangDetail | null>(null);
+  const [foundPeminjaman, setFoundPeminjaman] = useState<Borrowing | null>(
+    null
+  );
   const [verificationPhoto, setVerificationPhoto] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   // Focus on scan input on mount
   useEffect(() => {
@@ -37,7 +53,7 @@ const ReturnFlow = () => {
     }
   }, []);
 
-  // enumerate cameras on mount
+  // Enumerate cameras on mount
   useEffect(() => {
     const list = async () => {
       try {
@@ -54,13 +70,11 @@ const ReturnFlow = () => {
     list();
   }, [selectedCameraId]);
 
-  // request camera permission (prompts the user) and re-enumerate devices
+  // Request camera permission
   const requestCameraPermission = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      // stop immediately (we just wanted permission)
       stream.getTracks().forEach((t) => t.stop());
-      // re-enumerate devices so labels appear
       const devices = await navigator.mediaDevices.enumerateDevices();
       const cams = devices.filter((d) => d.kind === "videoinput");
       setCameras(cams);
@@ -74,49 +88,28 @@ const ReturnFlow = () => {
   };
 
   const startWebcam = async (deviceId?: string) => {
-    // Prefer using html5-qrcode for live decoding when available
     try {
       const readerId = "qr-reader";
-      // ensure the reader container is rendered before constructing the Html5Qrcode instance
       setScannerActive(true);
       await new Promise((r) => setTimeout(r, 150));
       if (!html5QrRef.current) {
         html5QrRef.current = new Html5Qrcode(readerId);
       }
 
-      const config = { fps: 10, formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128] } as any;
+      const config = {
+        fps: 10,
+        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
+      } as any;
 
       await html5QrRef.current.start(
         { deviceId: deviceId ? { exact: deviceId } : undefined } as any,
         config,
-        (decodedText) => {
-          // a barcode was detected
+        async (decodedText) => {
           const code = String(decodedText).trim();
-          // try to find the item immediately, but DO NOT mutate or change global status here
-          const item = mockItems.find((i) => i.kode_barang.toLowerCase() === code.toLowerCase());
-          if (item) {
-            // advance directly to verification with the detected item
-            setFoundItem(item);
-            setCurrentStep("verify");
-            toast.success(`Barcode terdeteksi: ${item.nama_barang} (${item.kode_barang})`);
-            // stop and clear scanner
-            try {
-              html5QrRef.current?.stop().then(() => {
-                html5QrRef.current?.clear();
-                html5QrRef.current = null;
-                setScannerActive(false);
-                setWebcamEnabled(false);
-              });
-            } catch (e) {
-              console.warn("Error stopping html5-qrcode", e);
-            }
-          } else {
-            // not found — keep scanning but let user know
-            toast.error("Barcode tidak dikenali. Arahkan kamera lagi atau coba manual.");
-          }
+          await searchBarang(code);
         },
         (errorMsg) => {
-          // scanning failure or intermediate errors
+          // scanning failure
         }
       );
 
@@ -124,10 +117,11 @@ const ReturnFlow = () => {
     } catch (err) {
       console.error("Failed to start webcam/scanner:", err);
       toast.error("Gagal mengaktifkan webcam atau scanner");
-      // fallback: try starting a raw MediaStream so snapshot still works
       try {
         const constraints: MediaStreamConstraints = {
-          video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" },
+          video: deviceId
+            ? { deviceId: { exact: deviceId } }
+            : { facingMode: "environment" },
           audio: false,
         };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -145,7 +139,6 @@ const ReturnFlow = () => {
 
   const stopWebcam = () => {
     try {
-      // stop html5-qrcode if active
       if (html5QrRef.current) {
         try {
           html5QrRef.current.stop().then(() => {
@@ -173,66 +166,105 @@ const ReturnFlow = () => {
     }
   };
 
-  // snapshots removed: preview only
-
-  const handleScanBarcode = () => {
-    if (!scannedBarcode.trim()) {
+  // Search barang by kode_barang from database
+  const searchBarang = async (kode: string) => {
+    if (!kode.trim()) {
       toast.error("Silakan scan atau masukkan barcode barang");
       return;
     }
 
-    // DUMMY MODE: Find item by kode_barang
-    const item = mockItems.find(
-      (i) => i.kode_barang.toLowerCase() === scannedBarcode.toLowerCase()
-    );
+    setIsLoading(true);
+    try {
+      // Get all barang and find the one with matching kode_barang
+      const allBarang = await barangAPI.getAll();
+      const item = allBarang.find(
+        (b) => b.kode_barang.toLowerCase() === kode.toLowerCase()
+      );
 
-    if (item) {
+      if (!item) {
+        toast.error("❌ Barcode tidak dikenali. Coba lagi.");
+        setScannedBarcode("");
+        if (scanInputRef.current) {
+          scanInputRef.current.focus();
+        }
+        return;
+      }
+
+      // Check if item is currently borrowed (status should be "Dipinjam")
+      if (item.status !== "Dipinjam") {
+        toast.error(
+          `❌ Barang ini tidak sedang dipinjam (Status: ${item.status})`
+        );
+        setScannedBarcode("");
+        return;
+      }
+
       setFoundItem(item);
+
+      // Find the peminjaman record for this barang
+      // For now, we'll just proceed to verification
+      // In a real scenario, you'd need to find which peminjaman record this belongs to
+
       setCurrentStep("verify");
       toast.success(`✓ Barang ditemukan: ${item.nama_barang}`);
-    } else {
-      toast.error("❌ Barcode tidak dikenali. Coba lagi.");
-      setScannedBarcode("");
-      if (scanInputRef.current) {
-        scanInputRef.current.focus();
+
+      // Stop scanner
+      try {
+        stopWebcam();
+      } catch (e) {
+        console.warn("Error stopping scanner", e);
       }
+    } catch (error) {
+      console.error("Error searching barang:", error);
+      toast.error("Gagal mencari barang");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handlePhotoVerification = (imageData: string) => {
+  const handleScanBarcode = async () => {
+    await searchBarang(scannedBarcode);
+  };
+
+  const handlePhotoVerification = async (imageData: string) => {
     setVerificationPhoto(imageData);
-    toast.success("Foto verifikasi berhasil!");
-    setTimeout(() => {
-      setCurrentStep("complete");
-    }, 500);
-  };
+    toast.success("Foto verifikasi berhasil! Memproses pengembalian...");
 
-  const handleComplete = () => {
-    if (!foundItem) {
-      toast.error("Data barang tidak lengkap");
-      return;
+    setIsLoading(true);
+    try {
+      // Update barang status back to "Tersedia"
+      await barangAPI.update(foundItem!.id, {
+        status: "Tersedia",
+      });
+
+      toast.success(`✓ Pengembalian ${foundItem!.nama_barang} berhasil!`);
+
+      // Move to complete step
+      setTimeout(() => {
+        setCurrentStep("complete");
+      }, 500);
+    } catch (error) {
+      console.error("Error updating barang status:", error);
+      toast.error("Gagal mengupdate status barang. Silahkan coba lagi.");
+    } finally {
+      setIsLoading(false);
     }
-
-    // DUMMY MODE: Just show success
-    toast.success(
-      `✓ Pengembalian ${foundItem.nama_barang} berhasil!`
-    );
-
-    // Reset untuk scan berikutnya
-    setTimeout(() => {
-      setCurrentStep("scan");
-      setScannedBarcode("");
-      setFoundItem(null);
-      setVerificationPhoto("");
-      if (scanInputRef.current) {
-        scanInputRef.current.focus();
-      }
-    }, 1500);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleScanBarcode();
+    }
+  };
+
+  const handleScanAgain = () => {
+    setCurrentStep("scan");
+    setScannedBarcode("");
+    setFoundItem(null);
+    setFoundPeminjaman(null);
+    setVerificationPhoto("");
+    if (scanInputRef.current) {
+      scanInputRef.current.focus();
     }
   };
 
@@ -246,7 +278,8 @@ const ReturnFlow = () => {
 
         <h2 className="text-3xl font-bold mb-2">Kembalikan Barang</h2>
         <p className="text-muted-foreground mb-8">
-          Scan barcode barang dengan alat scanner atau masukkan kode barang secara manual
+          Scan barcode barang dengan alat scanner atau masukkan kode barang
+          secara manual
         </p>
 
         {/* Step: Scan Barcode */}
@@ -259,12 +292,14 @@ const ReturnFlow = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Scanner Input - Invisible but functional */}
+              {/* Scanner Input */}
               <div className="space-y-4">
                 <Alert className="bg-blue-50 border-blue-200">
                   <AlertCircle className="h-4 w-4 text-blue-600" />
                   <AlertDescription className="text-blue-900 text-sm">
-                    <strong>Instruksi:</strong> Letakkan kursor di input box di bawah, kemudian gunakan alat scanner untuk scan barcode barang. Input akan otomatis terisi dan diproses.
+                    <strong>Instruksi:</strong> Letakkan kursor di input box di
+                    bawah, kemudian gunakan alat scanner untuk scan barcode
+                    barang. Input akan otomatis terisi dan diproses.
                   </AlertDescription>
                 </Alert>
 
@@ -278,10 +313,13 @@ const ReturnFlow = () => {
                     id="barcode"
                     placeholder="Scan barcode atau ketik kode barang (contoh: BRG-001)"
                     value={scannedBarcode}
-                    onChange={(e) => setScannedBarcode(e.target.value.toUpperCase())}
+                    onChange={(e) =>
+                      setScannedBarcode(e.target.value.toUpperCase())
+                    }
                     onKeyPress={handleKeyPress}
                     className="text-lg font-mono mt-1 border-2"
                     autoFocus
+                    disabled={isLoading}
                   />
                   <p className="text-xs text-muted-foreground mt-2">
                     Tekan Enter atau klik tombol Scan untuk memproses barcode
@@ -294,6 +332,7 @@ const ReturnFlow = () => {
                     size="lg"
                     className="w-full"
                     variant="default"
+                    disabled={isLoading}
                   >
                     <Barcode className="h-4 w-4 mr-2" />
                     Scan
@@ -307,15 +346,18 @@ const ReturnFlow = () => {
                     }}
                     size="lg"
                     variant="outline"
+                    disabled={isLoading}
                   >
                     Bersihkan
                   </Button>
                 </div>
 
-                {/* Webcam preview (external webcam) */}
+                {/* Webcam preview */}
                 <div className="pt-4 border-t">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">Gunakan Webcam (preview)</p>
+                    <p className="text-sm font-medium">
+                      Gunakan Webcam (preview)
+                    </p>
                     <div className="flex items-center gap-2">
                       <select
                         value={selectedCameraId ?? ""}
@@ -323,24 +365,33 @@ const ReturnFlow = () => {
                         className="text-sm p-1 border rounded"
                       >
                         {cameras.map((c) => (
-                          <option key={c.deviceId} value={c.deviceId}>{c.label || c.deviceId}</option>
+                          <option key={c.deviceId} value={c.deviceId}>
+                            {c.label || c.deviceId}
+                          </option>
                         ))}
                       </select>
                       {!webcamEnabled ? (
                         <Button
                           size="sm"
                           onClick={async () => {
-                            // ensure permission is requested first so device labels become available
                             const granted = await requestCameraPermission();
                             if (granted) {
                               startWebcam(selectedCameraId ?? undefined);
                             }
                           }}
+                          disabled={isLoading}
                         >
                           Start Webcam
                         </Button>
                       ) : (
-                        <Button size="sm" variant="destructive" onClick={stopWebcam}>Stop Webcam</Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={stopWebcam}
+                          disabled={isLoading}
+                        >
+                          Stop Webcam
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -349,14 +400,26 @@ const ReturnFlow = () => {
                     {scannerActive ? (
                       <div id="qr-reader" className="w-full h-80 bg-black" />
                     ) : (
-                      <video ref={videoRef} className="w-full h-80 bg-black object-cover" playsInline muted />
+                      <video
+                        ref={videoRef}
+                        className="w-full h-80 bg-black object-cover"
+                        playsInline
+                        muted
+                      />
                     )}
                     <div className="flex gap-2 mt-2">
-                      <Button size="sm" variant="outline" onClick={() => {
-                        stopWebcam();
-                        // ensure focus back to input
-                        if (scanInputRef.current) scanInputRef.current.focus();
-                      }}>Close</Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          stopWebcam();
+                          if (scanInputRef.current)
+                            scanInputRef.current.focus();
+                        }}
+                        disabled={isLoading}
+                      >
+                        Close
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -366,34 +429,15 @@ const ReturnFlow = () => {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription className="text-xs space-y-2">
-                  <p><strong>Satu barang = Satu scan</strong></p>
-                  <p>Jika ada beberapa barang yang dikembalikan, scan satu per satu dan proses untuk masing-masing barang.</p>
-                  <p>Format barcode: BRG-001, BRG-002, dst (sesuai dengan kode barang individual)</p>
+                  <p>
+                    <strong>Satu barang = Satu scan</strong>
+                  </p>
+                  <p>
+                    Jika ada beberapa barang yang dikembalikan, scan satu per
+                    satu dan proses untuk masing-masing barang.
+                  </p>
                 </AlertDescription>
               </Alert>
-
-              {/* Recent Items - untuk testing */}
-              <div className="border-t pt-4">
-                <p className="text-sm font-semibold mb-2">📦 Barang Tersedia untuk Testing:</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {mockItems.slice(0, 3).map((item) => (
-                    <Button
-                      key={item.id}
-                      variant="outline"
-                      className="justify-start text-left h-auto py-2"
-                      onClick={() => {
-                        setScannedBarcode(item.kode_barang);
-                        setTimeout(() => handleScanBarcode(), 100);
-                      }}
-                    >
-                      <div className="text-xs">
-                        <div className="font-mono font-bold">{item.kode_barang}</div>
-                        <div className="text-gray-600">{item.nama_barang}</div>
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-              </div>
             </CardContent>
           </Card>
         )}
@@ -418,16 +462,18 @@ const ReturnFlow = () => {
                   <div className="flex-1 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-bold text-lg">{foundItem.nama_barang}</h3>
+                        <h3 className="font-bold text-lg">
+                          {foundItem.nama_barang}
+                        </h3>
                         <p className="text-sm font-mono text-gray-600">
                           Kode: {foundItem.kode_barang}
                         </p>
                       </div>
                       <CheckCircle className="h-6 w-6 text-green-600" />
                     </div>
-                    {foundItem.notes && (
+                    {foundItem.deskripsi_barang && (
                       <p className="text-sm text-gray-700 bg-white/50 p-2 rounded">
-                        {foundItem.notes}
+                        {foundItem.deskripsi_barang}
                       </p>
                     )}
                   </div>
@@ -438,7 +484,8 @@ const ReturnFlow = () => {
               <Alert className="bg-yellow-50 border-yellow-200">
                 <AlertCircle className="h-4 w-4 text-yellow-700" />
                 <AlertDescription className="text-yellow-800 text-sm">
-                  Pastikan barang yang di-scan sesuai dengan barang di tangan Anda sebelum melanjutkan.
+                  Pastikan barang yang di-scan sesuai dengan barang di tangan
+                  Anda sebelum melanjutkan.
                 </AlertDescription>
               </Alert>
 
@@ -447,20 +494,16 @@ const ReturnFlow = () => {
                 <h4 className="font-semibold flex items-center gap-2">
                   📸 Ambil Foto Verifikasi
                 </h4>
-                <CameraCapture onCapture={handlePhotoVerification} />
+                <CameraCapture
+                  onCapture={handlePhotoVerification}
+                  label="Foto Pengembalian Barang"
+                />
               </div>
 
               {/* Actions */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="w-full">
                 <Button
-                  onClick={() => {
-                    setCurrentStep("scan");
-                    setFoundItem(null);
-                    setScannedBarcode("");
-                    if (scanInputRef.current) {
-                      scanInputRef.current.focus();
-                    }
-                  }}
+                  onClick={handleScanAgain}
                   variant="outline"
                   className="w-full"
                 >
@@ -488,7 +531,9 @@ const ReturnFlow = () => {
               {/* Item Returned */}
               <div className="bg-success/5 border-2 border-success rounded-lg p-6">
                 <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">Barang yang Dikembalikan:</p>
+                  <p className="text-sm text-muted-foreground">
+                    Barang yang Dikembalikan:
+                  </p>
                   <p className="text-2xl font-bold">{foundItem.nama_barang}</p>
                   <p className="text-sm font-mono text-gray-600">
                     Kode: {foundItem.kode_barang}
@@ -511,25 +556,29 @@ const ReturnFlow = () => {
               {/* Actions */}
               <div className="grid grid-cols-2 gap-2">
                 <Button
-                  onClick={handleComplete}
+                  onClick={handleScanAgain}
                   size="lg"
                   className="w-full"
+                  disabled={isLoading}
                 >
-                  ✓ Selesai
+                  Kembalikan Lagi
                 </Button>
                 <Button
                   onClick={() => navigate("/")}
                   size="lg"
                   variant="outline"
+                  disabled={isLoading}
                 >
-                  Beranda
+                  Selesai
                 </Button>
               </div>
 
               <Alert className="bg-blue-50 border-blue-200">
                 <AlertCircle className="h-4 w-4 text-blue-600" />
                 <AlertDescription className="text-blue-900 text-sm">
-                  Terimakasih telah mengembalikan barang. Jika ada barang lagi yang dikembalikan, klik "Selesai" untuk melanjutkan dengan barang berikutnya.
+                  Terimakasih telah mengembalikan barang. Jika ada barang lagi
+                  yang dikembalikan, klik "Kembalikan Lagi" untuk melanjutkan
+                  dengan barang berikutnya.
                 </AlertDescription>
               </Alert>
             </CardContent>

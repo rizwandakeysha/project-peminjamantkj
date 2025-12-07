@@ -227,13 +227,29 @@ exports.createBarang = async (req, res) => {
 exports.updateBarang = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nama_barang, deskripsi_barang, foto_barang, no_serial_number, id_jenis_barang, status } = req.body;
+    const updates = req.body;
+
+    // Build dynamic UPDATE query - only update fields that are provided
+    const allowedFields = ['nama_barang', 'deskripsi_barang', 'foto_barang', 'no_serial_number', 'id_jenis_barang', 'status'];
+    const fieldsToUpdate = allowedFields.filter(field => updates.hasOwnProperty(field));
+
+    if (fieldsToUpdate.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No valid fields to update',
+      });
+    }
+
+    // Build the SET clause dynamically
+    const setClause = fieldsToUpdate.map((field, index) => `${field} = $${index + 1}`).join(', ');
+    const values = fieldsToUpdate.map(field => updates[field]);
+    values.push(id); // Add ID as the last parameter
 
     const result = await db.query(
       `UPDATE barang 
-       SET nama_barang = $1, deskripsi_barang = $2, foto_barang = $3, no_serial_number = $4, id_jenis_barang = $5, status = $6 
-       WHERE id_barang = $7`,
-      [nama_barang, deskripsi_barang || null, foto_barang || null, no_serial_number || null, id_jenis_barang || null, status, id]
+       SET ${setClause}
+       WHERE id_barang = $${fieldsToUpdate.length + 1}`,
+      values
     );
 
     if (result.rowCount === 0) {
