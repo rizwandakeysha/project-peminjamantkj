@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AdminLayout from "@/layouts/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,54 +31,27 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Edit, Trash2, UserCog, Users as UsersIcon, GraduationCap } from "lucide-react";
+import { Search, Plus, Edit, Trash2, Users as UsersIcon, GraduationCap } from "lucide-react";
+import { adminAPI, guruAPI, siswaAPI } from "@/lib/api";
+import { mockGuru, mockSiswa } from "@/lib/mockData";
 import { toast } from "react-hot-toast";
 
-// Mock data
-const mockAdmins = [
-  {
-    id: 1,
-    username: "admin",
-    nama_lengkap: "Administrator TKJ",
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 2,
-    username: "admin2",
-    nama_lengkap: "Admin Backup",
-    created_at: new Date().toISOString(),
-  },
-];
-
-const mockGuru = [
-  { id: 1, nip: "NIP-001", name: "Pak Budi Santoso", created_at: new Date().toISOString() },
-  { id: 2, nip: "NIP-002", name: "Bu Ani Wijaya", created_at: new Date().toISOString() },
-  { id: 3, nip: "NIP-003", name: "Pak Dino Pratama", created_at: new Date().toISOString() },
-  { id: 4, nip: "NIP-004", name: "Bu Sita Rahman", created_at: new Date().toISOString() },
-  { id: 5, nip: "NIP-005", name: "Pak Eko Kurniawan", created_at: new Date().toISOString() },
-];
-
-const mockSiswa = [
-  { id: 1, nis: "14301/2364.066", name: "ABDULLOH ARRAFIFF", kelas: "X TKJ 1", created_at: new Date().toISOString() },
-  { id: 2, nis: "14302/2365.066", name: "ABY NUR SYAHDANI", kelas: "X TKJ 1", created_at: new Date().toISOString() },
-  { id: 3, nis: "14304/2367.066", name: "ADAM PRANANDA SUHENDAR", kelas: "X TKJ 1", created_at: new Date().toISOString() },
-  { id: 4, nis: "14305/2368.066", name: "ADEVITA INDRIYANTI", kelas: "X TKJ 1", created_at: new Date().toISOString() },
-  { id: 5, nis: "14309/2372.066", name: "AHMAD MAFTUHUR RIZQY", kelas: "X TKJ 1", created_at: new Date().toISOString() },
-  { id: 6, nis: "14400/2500.061", name: "Tali Goci 01", kelas: "X TKJ 2", created_at: new Date().toISOString() },
-  { id: 7, nis: "14401/2501.061", name: "Tali Goci 02", kelas: "X TKJ 2", created_at: new Date().toISOString() },
-  { id: 8, nis: "14425/2525.061", name: "Jian Ayune 01", kelas: "X TKJ 3", created_at: new Date().toISOString() },
-  { id: 9, nis: "13700/2350.061", name: "Owalah Yowes 01", kelas: "XI TKJ 1", created_at: new Date().toISOString() },
-  { id: 10, nis: "13710/2360.061", name: "Yanto Hay 01", kelas: "XI TKJ 2", created_at: new Date().toISOString() },
-];
-
 const Users = () => {
-  const [activeTab, setActiveTab] = useState("admin");
+  const [activeTab, setActiveTab] = useState("guru");
+  const [activeKelas, setActiveKelas] = useState("X TKJ 1");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ id: number; type: string } | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [importGuruDialogOpen, setImportGuruDialogOpen] = useState(false);
+  const [importSiswaDialogOpen, setImportSiswaDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Data states
+  const [guru, setGuru] = useState<any[]>([]);
+  const [siswa, setSiswa] = useState<any[]>([]);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -91,42 +64,264 @@ const Users = () => {
     kelas: "",
   });
 
+  // Fetch data on mount
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
+  const fetchAllData = async () => {
+    try {
+      setLoading(true);
+      console.log("🔄 Fetching guru and siswa data from API...");
+      
+      const [guruData, siswaData] = await Promise.all([
+        guruAPI.getAll().catch(err => {
+          console.error("❌ Error fetching guru:", err);
+          return null;
+        }),
+        siswaAPI.getAll().catch(err => {
+          console.error("❌ Error fetching siswa:", err);
+          return null;
+        }),
+      ]);
+      
+      console.log("✅ API Response:", { guruData, siswaData });
+      
+      setGuru(guruData && Array.isArray(guruData) && guruData.length > 0 ? guruData : mockGuru);
+      setSiswa(siswaData && Array.isArray(siswaData) && siswaData.length > 0 ? siswaData : mockSiswa);
+    } catch (error) {
+      console.error("❌ Error fetching data:", error);
+      toast.error("Gagal memuat data pengguna");
+      // Fallback to mock data
+      setGuru(mockGuru);
+      setSiswa(mockSiswa);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!itemToDelete) return;
-    toast.success(`${itemToDelete.type} berhasil dihapus!`);
-    setDeleteDialogOpen(false);
-    setItemToDelete(null);
+    try {
+      setLoading(true);
+      const type = itemToDelete.type.toLowerCase();
+      
+      if (type === "guru") {
+        await guruAPI.delete(itemToDelete.id);
+        setGuru(guru.filter(g => g.id !== itemToDelete.id));
+      } else if (type === "siswa") {
+        await siswaAPI.delete(itemToDelete.id);
+        setSiswa(siswa.filter(s => s.id !== itemToDelete.id));
+      }
+      
+      toast.success(`${itemToDelete.type} berhasil dihapus!`);
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
+    } catch (error) {
+      console.error("Error deleting:", error);
+      toast.error("Gagal menghapus data");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleAdd = () => {
-    toast.success(`${activeTab === "admin" ? "Admin" : activeTab === "guru" ? "Guru" : "Siswa"} berhasil ditambahkan!`);
-    setAddDialogOpen(false);
-    setFormData({
-      username: "",
-      nama_lengkap: "",
-      password: "",
-      nip: "",
-      name: "",
-      nis: "",
-      kelas: "",
-    });
+  const handleAdd = async () => {
+    if (!formData.name && !formData.username && !formData.nis) {
+      toast.error("Silakan isi semua field yang diperlukan");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const type = activeTab;
+      
+      if (type === "guru") {
+        if (!formData.nip || !formData.name) {
+          toast.error("NIP dan nama harus diisi");
+          return;
+        }
+        const newGuru = await guruAPI.create({
+          nip: formData.nip,
+          name: formData.name,
+        });
+        setGuru([...guru, newGuru]);
+      } else if (type === "siswa") {
+        if (!formData.nis || !formData.name || !formData.kelas) {
+          toast.error("NIS, nama, dan kelas harus diisi");
+          return;
+        }
+        const newSiswa = await siswaAPI.create({
+          nis: formData.nis,
+          name: formData.name,
+          kelas: formData.kelas,
+        });
+        setSiswa([...siswa, newSiswa]);
+      }
+      
+      toast.success(`${activeTab === "admin" ? "Admin" : activeTab === "guru" ? "Guru" : "Siswa"} berhasil ditambahkan!`);
+      setAddDialogOpen(false);
+      setFormData({
+        username: "",
+        nama_lengkap: "",
+        password: "",
+        nip: "",
+        name: "",
+        nis: "",
+        kelas: "",
+      });
+    } catch (error) {
+      console.error("Error adding:", error);
+      toast.error("Gagal menambah data");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleEdit = () => {
-    toast.success(`Data berhasil diupdate!`);
-    setEditDialogOpen(false);
-    setEditingItem(null);
+  // Import CSV Guru: headers nip,name
+  const handleImportGuruCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setLoading(true);
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        toast.error("File kosong atau format tidak valid");
+        return;
+      }
+      const header = lines.shift()!.split(",").map(h => h.trim().toLowerCase());
+      const idxNip = header.indexOf("nip");
+      const idxName = header.indexOf("name");
+      if (idxNip === -1 || idxName === -1) {
+        toast.error("Header harus mengandung nip,name");
+        return;
+      }
+
+      const newEntries: { nip: string; name: string; created_at?: string }[] = [];
+      for (const line of lines) {
+        const cols = line.split(",");
+        const nip = (cols[idxNip] || "").trim();
+        const name = (cols[idxName] || "").trim();
+        if (!nip || !name) continue;
+        try {
+          const created = await guruAPI.create({ nip, name });
+          newEntries.push(created);
+        } catch (err) {
+          console.error("Import guru gagal untuk", nip, err);
+        }
+      }
+
+      if (newEntries.length === 0) {
+        toast.error("Tidak ada guru yang berhasil diimport");
+        return;
+      }
+
+      setGuru([...guru, ...newEntries]);
+      toast.success(`Berhasil import ${newEntries.length} guru`);
+    } catch (error) {
+      console.error("Error import guru:", error);
+      toast.error("Gagal import CSV guru");
+    } finally {
+      setLoading(false);
+      e.target.value = "";
+    }
+  };
+
+  // Import CSV Siswa: headers nis,name,kelas
+  const handleImportSiswaCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setLoading(true);
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        toast.error("File kosong atau format tidak valid");
+        return;
+      }
+      const header = lines.shift()!.split(",").map(h => h.trim().toLowerCase());
+      const idxNis = header.indexOf("nis");
+      const idxName = header.indexOf("name");
+      const idxKelas = header.indexOf("kelas");
+      if (idxNis === -1 || idxName === -1 || idxKelas === -1) {
+        toast.error("Header harus mengandung nis,name,kelas");
+        return;
+      }
+
+      const newEntries: { nis: string; name: string; kelas: string; created_at?: string }[] = [];
+      for (const line of lines) {
+        const cols = line.split(",");
+        const nis = (cols[idxNis] || "").trim();
+        const name = (cols[idxName] || "").trim();
+        const kelas = (cols[idxKelas] || "").trim();
+        if (!nis || !name || !kelas) continue;
+        try {
+          const created = await siswaAPI.create({ nis, name, kelas });
+          newEntries.push(created);
+        } catch (err) {
+          console.error("Import siswa gagal untuk", nis, err);
+        }
+      }
+
+      if (newEntries.length === 0) {
+        toast.error("Tidak ada siswa yang berhasil diimport");
+        return;
+      }
+
+      setSiswa([...siswa, ...newEntries]);
+      toast.success(`Berhasil import ${newEntries.length} siswa`);
+    } catch (error) {
+      console.error("Error import siswa:", error);
+      toast.error("Gagal import CSV siswa");
+    } finally {
+      setLoading(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!editingItem) return;
+    try {
+      setLoading(true);
+      const type = editingItem.type;
+      
+      if (type === "guru") {
+        if (!formData.nip || !formData.name) {
+          toast.error("NIP dan nama harus diisi");
+          return;
+        }
+        await guruAPI.update(editingItem.id, {
+          nip: formData.nip,
+          name: formData.name,
+        });
+        setGuru(guru.map(g => g.id === editingItem.id ? { ...g, nip: formData.nip, name: formData.name } : g));
+      } else if (type === "siswa") {
+        if (!formData.nis || !formData.name || !formData.kelas) {
+          toast.error("NIS, nama, dan kelas harus diisi");
+          return;
+        }
+        await siswaAPI.update(editingItem.id, {
+          nis: formData.nis,
+          name: formData.name,
+          kelas: formData.kelas,
+        });
+        setSiswa(siswa.map(s => s.id === editingItem.id ? { ...s, nis: formData.nis, name: formData.name, kelas: formData.kelas } : s));
+      }
+      
+      toast.success(`Data berhasil diupdate!`);
+      setEditDialogOpen(false);
+      setEditingItem(null);
+    } catch (error) {
+      console.error("Error editing:", error);
+      toast.error("Gagal mengupdate data");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openEditDialog = (item: any, type: string) => {
     setEditingItem({ ...item, type });
-    if (type === "admin") {
-      setFormData({
-        ...formData,
-        username: item.username,
-        nama_lengkap: item.nama_lengkap,
-      });
-    } else if (type === "guru") {
+    if (type === "guru") {
       setFormData({
         ...formData,
         nip: item.nip,
@@ -143,21 +338,29 @@ const Users = () => {
     setEditDialogOpen(true);
   };
 
-  const filteredAdmins = mockAdmins.filter((a) =>
-    a.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    a.nama_lengkap.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredGuru = mockGuru.filter((g) =>
+  const filteredGuru = guru.filter((g) =>
     g.nip.toLowerCase().includes(searchQuery.toLowerCase()) ||
     g.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredSiswa = mockSiswa.filter((s) =>
+  const filteredSiswa = siswa.filter((s) =>
     s.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     s.kelas.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (loading && guru.length === 0 && siswa.length === 0) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Memuat data pengguna...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -172,18 +375,7 @@ const Users = () => {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Admin
-              </CardTitle>
-              <UserCog className="h-5 w-5 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{mockAdmins.length}</div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -192,7 +384,7 @@ const Users = () => {
               <UsersIcon className="h-5 w-5 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{mockGuru.length}</div>
+              <div className="text-3xl font-bold">{guru.length}</div>
             </CardContent>
           </Card>
           <Card>
@@ -203,7 +395,7 @@ const Users = () => {
               <GraduationCap className="h-5 w-5 text-info" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{mockSiswa.length}</div>
+              <div className="text-3xl font-bold">{siswa.length}</div>
             </CardContent>
           </Card>
         </div>
@@ -222,6 +414,16 @@ const Users = () => {
                     className="pl-10"
                   />
                 </div>
+                {activeTab === "guru" && (
+                  <Button variant="outline" onClick={() => setImportGuruDialogOpen(true)}>
+                    Import CSV Guru
+                  </Button>
+                )}
+                {activeTab === "siswa" && (
+                  <Button variant="outline" onClick={() => setImportSiswaDialogOpen(true)}>
+                    Import CSV Siswa
+                  </Button>
+                )}
                 <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
                   <DialogTrigger asChild>
                     <Button>
@@ -232,42 +434,10 @@ const Users = () => {
                   <DialogContent>
                     <DialogHeader>
                       <DialogTitle>
-                        Tambah {activeTab === "admin" ? "Admin" : activeTab === "guru" ? "Guru" : "Siswa"}
+                        Tambah {activeTab === "guru" ? "Guru" : "Siswa"}
                       </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
-                      {activeTab === "admin" && (
-                        <>
-                          <div>
-                            <Label htmlFor="username">Username *</Label>
-                            <Input
-                              id="username"
-                              value={formData.username}
-                              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                              placeholder="Username"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="nama_lengkap">Nama Lengkap *</Label>
-                            <Input
-                              id="nama_lengkap"
-                              value={formData.nama_lengkap}
-                              onChange={(e) => setFormData({ ...formData, nama_lengkap: e.target.value })}
-                              placeholder="Nama Lengkap"
-                            />
-                          </div>
-                          <div>
-                            <Label htmlFor="password">Password *</Label>
-                            <Input
-                              id="password"
-                              type="password"
-                              value={formData.password}
-                              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                              placeholder="Password"
-                            />
-                          </div>
-                        </>
-                      )}
                       {activeTab === "guru" && (
                         <>
                           <div>
@@ -335,11 +505,7 @@ const Users = () => {
           </CardHeader>
           <CardContent>
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="admin">
-                  <UserCog className="h-4 w-4 mr-2" />
-                  Admin
-                </TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="guru">
                   <UsersIcon className="h-4 w-4 mr-2" />
                   Guru
@@ -350,62 +516,6 @@ const Users = () => {
                 </TabsTrigger>
               </TabsList>
 
-              {/* Admin Tab */}
-              <TabsContent value="admin" className="space-y-4">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>No</TableHead>
-                        <TableHead>Username</TableHead>
-                        <TableHead>Nama Lengkap</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Aksi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredAdmins.map((admin, index) => (
-                        <TableRow key={admin.id}>
-                          <TableCell>{index + 1}</TableCell>
-                          <TableCell>
-                            <code className="text-xs bg-muted px-2 py-1 rounded">
-                              {admin.username}
-                            </code>
-                          </TableCell>
-                          <TableCell className="font-medium">{admin.nama_lengkap}</TableCell>
-                          <TableCell>
-                            <Badge variant="default" className="bg-success">
-                              Aktif
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-1 justify-end">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditDialog(admin, "admin")}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  setItemToDelete({ id: admin.id, type: "Admin" });
-                                  setDeleteDialogOpen(true);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </TabsContent>
 
               {/* Guru Tab */}
               <TabsContent value="guru" className="space-y-4">
@@ -421,15 +531,15 @@ const Users = () => {
                     </TableHeader>
                     <TableBody>
                       {filteredGuru.map((guru, index) => (
-                        <TableRow key={guru.id}>
-                          <TableCell>{index + 1}</TableCell>
-                          <TableCell>
+                        <TableRow key={guru.id} className="h-auto">
+                          <TableCell className="py-2">{index + 1}</TableCell>
+                          <TableCell className="py-2">
                             <code className="text-xs bg-muted px-2 py-1 rounded">
                               {guru.nip}
                             </code>
                           </TableCell>
-                          <TableCell className="font-medium">{guru.name}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="font-medium py-2">{guru.name}</TableCell>
+                          <TableCell className="text-right py-2">
                             <div className="flex gap-1 justify-end">
                               <Button
                                 variant="ghost"
@@ -460,57 +570,79 @@ const Users = () => {
 
               {/* Siswa Tab */}
               <TabsContent value="siswa" className="space-y-4">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>No</TableHead>
-                        <TableHead>NIS</TableHead>
-                        <TableHead>Nama Lengkap</TableHead>
-                        <TableHead>Kelas</TableHead>
-                        <TableHead className="text-right">Aksi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredSiswa.map((siswa, index) => (
-                        <TableRow key={siswa.id}>
-                          <TableCell>{index + 1}</TableCell>
-                          <TableCell>
-                            <code className="text-xs bg-muted px-2 py-1 rounded">
-                              {siswa.nis}
-                            </code>
-                          </TableCell>
-                          <TableCell className="font-medium">{siswa.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{siswa.kelas}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-1 justify-end">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => openEditDialog(siswa, "siswa")}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  setItemToDelete({ id: siswa.id, type: "Siswa" });
-                                  setDeleteDialogOpen(true);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <Tabs value={activeKelas} onValueChange={setActiveKelas}>
+                  <TabsList className="grid w-full grid-cols-6">
+                    <TabsTrigger value="X TKJ 1">X TKJ 1</TabsTrigger>
+                    <TabsTrigger value="X TKJ 2">X TKJ 2</TabsTrigger>
+                    <TabsTrigger value="X TKJ 3">X TKJ 3</TabsTrigger>
+                    <TabsTrigger value="XI TKJ 1">XI TKJ 1</TabsTrigger>
+                    <TabsTrigger value="XI TKJ 2">XI TKJ 2</TabsTrigger>
+                    <TabsTrigger value="XI TKJ 3">XI TKJ 3</TabsTrigger>
+                  </TabsList>
+
+                  {["X TKJ 1", "X TKJ 2", "X TKJ 3", "XI TKJ 1", "XI TKJ 2", "XI TKJ 3"].map((kelas) => {
+                    const siswaByKelas = filteredSiswa.filter(s => s.kelas === kelas);
+                    return (
+                      <TabsContent key={kelas} value={kelas} className="space-y-4">
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>No</TableHead>
+                                <TableHead>NIS</TableHead>
+                                <TableHead>Nama Lengkap</TableHead>
+                                <TableHead className="text-right">Aksi</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {siswaByKelas.length > 0 ? (
+                                siswaByKelas.map((siswa, index) => (
+                                  <TableRow key={siswa.id} className="h-auto">
+                                    <TableCell className="py-2">{index + 1}</TableCell>
+                                    <TableCell className="py-2">
+                                      <code className="text-xs bg-muted px-2 py-1 rounded">
+                                        {siswa.nis}
+                                      </code>
+                                    </TableCell>
+                                    <TableCell className="font-medium py-2">{siswa.name}</TableCell>
+                                    <TableCell className="text-right py-2">
+                                      <div className="flex gap-1 justify-end">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => openEditDialog(siswa, "siswa")}
+                                        >
+                                          <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="text-destructive hover:text-destructive"
+                                          onClick={() => {
+                                            setItemToDelete({ id: siswa.id, type: "Siswa" });
+                                            setDeleteDialogOpen(true);
+                                          }}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))
+                              ) : (
+                                <TableRow>
+                                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                    Belum ada siswa di kelas {kelas}
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TabsContent>
+                    );
+                  })}
+                </Tabs>
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -597,6 +729,114 @@ const Users = () => {
                 Batal
               </Button>
               <Button onClick={handleEdit}>Update</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Guru Dialog */}
+        <Dialog open={importGuruDialogOpen} onOpenChange={setImportGuruDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Import CSV Guru</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Format CSV: <strong>nip, name</strong>
+                </p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  ✓ Kode tidak perlu, hanya nip & name<br/>
+                  ✓ Format: CSV saja (tidak support XLSX)
+                </p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="w-full mb-4"
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = '/template-guru.csv';
+                    link.download = 'template-guru.csv';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    toast.success('Template CSV berhasil didownload');
+                  }}
+                >
+                  📥 Download Template CSV
+                </Button>
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleImportGuruCsv}
+                    className="hidden"
+                    id="import-guru-file"
+                  />
+                  <label htmlFor="import-guru-file" className="cursor-pointer">
+                    <div className="text-sm font-medium">Klik untuk memilih file</div>
+                    <div className="text-xs text-muted-foreground mt-1">CSV</div>
+                  </label>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setImportGuruDialogOpen(false)}>
+                  Batal
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Siswa Dialog */}
+        <Dialog open={importSiswaDialogOpen} onOpenChange={setImportSiswaDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Import CSV Siswa</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Format CSV: <strong>nis, name, kelas</strong>
+                </p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  ✓ Kode tidak perlu, hanya nis & name & kelas<br/>
+                  ✓ Format: CSV saja (tidak support XLSX)
+                </p>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="w-full mb-4"
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = '/template-siswa.csv';
+                    link.download = 'template-siswa.csv';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    toast.success('Template CSV berhasil didownload');
+                  }}
+                >
+                  📥 Download Template CSV
+                </Button>
+                <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleImportSiswaCsv}
+                    className="hidden"
+                    id="import-siswa-file"
+                  />
+                  <label htmlFor="import-siswa-file" className="cursor-pointer">
+                    <div className="text-sm font-medium">Klik untuk memilih file</div>
+                    <div className="text-xs text-muted-foreground mt-1">CSV</div>
+                  </label>
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setImportSiswaDialogOpen(false)}>
+                  Batal
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

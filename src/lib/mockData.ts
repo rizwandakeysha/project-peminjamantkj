@@ -662,3 +662,42 @@ export const mockBarang = [
     created_at: new Date().toISOString(),
   },
 ];
+
+// Mock data untuk Admin
+export const mockAdmins = [
+  {
+    id: 1,
+    username: "admin",
+    nama_lengkap: "Administrator TKJ",
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 2,
+    username: "admin2",
+    nama_lengkap: "Admin Backup",
+    created_at: new Date().toISOString(),
+  },
+];
+
+// Mock data untuk Guru
+export const mockGuru = [
+  { id: 1, nip: "NIP-001", name: "Pak Budi Santoso", created_at: new Date().toISOString() },
+  { id: 2, nip: "NIP-002", name: "Bu Ani Wijaya", created_at: new Date().toISOString() },
+  { id: 3, nip: "NIP-003", name: "Pak Dino Pratama", created_at: new Date().toISOString() },
+  { id: 4, nip: "NIP-004", name: "Bu Sita Rahman", created_at: new Date().toISOString() },
+  { id: 5, nip: "NIP-005", name: "Pak Eko Kurniawan", created_at: new Date().toISOString() },
+];
+
+// Mock data untuk Siswa
+export const mockSiswa = [
+  { id: 1, nis: "14301/2364.066", name: "ABDULLOH ARRAFIFF", kelas: "X TKJ 1", created_at: new Date().toISOString() },
+  { id: 2, nis: "14302/2365.066", name: "ABY NUR SYAHDANI", kelas: "X TKJ 1", created_at: new Date().toISOString() },
+  { id: 3, nis: "14304/2367.066", name: "ADAM PRANANDA SUHENDAR", kelas: "X TKJ 1", created_at: new Date().toISOString() },
+  { id: 4, nis: "14305/2368.066", name: "ADEVITA INDRIYANTI", kelas: "X TKJ 1", created_at: new Date().toISOString() },
+  { id: 5, nis: "14309/2372.066", name: "AHMAD MAFTUHUR RIZQY", kelas: "X TKJ 1", created_at: new Date().toISOString() },
+  { id: 6, nis: "14400/2500.061", name: "Tali Goci 01", kelas: "X TKJ 2", created_at: new Date().toISOString() },
+  { id: 7, nis: "14401/2501.061", name: "Tali Goci 02", kelas: "X TKJ 2", created_at: new Date().toISOString() },
+  { id: 8, nis: "14425/2525.061", name: "Jian Ayune 01", kelas: "X TKJ 3", created_at: new Date().toISOString() },
+  { id: 9, nis: "13700/2350.061", name: "Owalah Yowes 01", kelas: "XI TKJ 1", created_at: new Date().toISOString() },
+  { id: 10, nis: "13710/2360.061", name: "Yanto Hay 01", kelas: "XI TKJ 2", created_at: new Date().toISOString() },
+];

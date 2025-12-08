@@ -1,0 +1,6 @@
+nama_barang,no_serial_number,deskripsi_barang,status,foto_barang
+Router Cisco 2911,CSC-2911-002,Router untuk praktik jaringan,Tersedia,https://images.unsplash.com/photo-1587829191301-48ca3d11c465?w=400
+Switch 48 Port,CSC-SW48-001,Switch manageable untuk lab,Tersedia,https://images.unsplash.com/photo-1517694712202-14819c9cb5c7?w=400
+Kabel UTP Cat5e,KABEL-001,Kabel networking standar,Tersedia,https://images.unsplash.com/photo-1551818014-7c8ace9c3084?w=400
+Fiber Optic Cable,FIBER-001,Kabel fiber optik untuk koneksi cepat,Dipinjam,https://images.unsplash.com/photo-1517694712202-14819c9cb5c7?w=400
+Network Hub,HUB-001,Hub 8 port untuk praktek,Tersedia,

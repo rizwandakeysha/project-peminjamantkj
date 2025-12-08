@@ -1,0 +1,9 @@
+jenis_barang,deskripsi_jenis,nama_barang,no_serial_number,deskripsi_barang,status,foto_barang
+Peralatan Networking,Alat dan kabel networking untuk praktik,Router Cisco 2911,CSC-2911-002,Router untuk praktik jaringan,Tersedia,https://images.unsplash.com/photo-1587829191301-48ca3d11c465?w=400
+Peralatan Networking,Alat dan kabel networking untuk praktik,Switch 48 Port,CSC-SW48-001,Switch manageable untuk lab,Tersedia,https://images.unsplash.com/photo-1517694712202-14819c9cb5c7?w=400
+Peralatan Networking,Alat dan kabel networking untuk praktik,Kabel UTP Cat5e,KABEL-001,Kabel networking standar,Tersedia,https://images.unsplash.com/photo-1551818014-7c8ace9c3084?w=400
+Peralatan Networking,Alat dan kabel networking untuk praktik,Fiber Optic Cable,FIBER-001,Kabel fiber optik untuk koneksi cepat,Dipinjam,https://images.unsplash.com/photo-1517694712202-14819c9cb5c7?w=400
+Peralatan Komputer,Komputer dan aksesori untuk praktik,PC Desktop,PC-001,PC desktop gaming untuk praktik,Tersedia,
+Peralatan Komputer,Komputer dan aksesori untuk praktik,Laptop HP Pavilion,LAP-HP-001,Laptop untuk praktik programming,Tersedia,
+Sistem Operasi,Software dan sistem operasi,Windows Server 2019,WIN-SRV-001,License Windows Server 2019,Tersedia,
+Sistem Operasi,Software dan sistem operasi,Ubuntu Linux,UBU-LIN-001,OS Linux untuk server praktik,Tersedia,

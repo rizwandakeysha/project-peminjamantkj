@@ -169,6 +169,12 @@ export const adminAPI = {
     return result.data!;
   },
 
+  // Get all admins
+  getAll: async (): Promise<{ id: number; username: string; nama_lengkap: string; created_at: string }[]> => {
+    const result = await fetchAPI<{ id: number; username: string; nama_lengkap: string; created_at: string }[]>("/admin");
+    return result.data || [];
+  },
+
   // Get profile (requires token)
   getProfile: async (token: string): Promise<any> => {
     const result = await fetchAPI<any>("/admin/profile", {
@@ -177,6 +183,30 @@ export const adminAPI = {
       },
     });
     return result.data!;
+  },
+
+  // Create admin
+  create: async (data: { username: string; nama_lengkap: string; password: string }): Promise<{ id: number; username: string; nama_lengkap: string; created_at: string }> => {
+    const result = await fetchAPI<{ id: number; username: string; nama_lengkap: string; created_at: string }>("/admin", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return result.data!;
+  },
+
+  // Update admin
+  update: async (id: number, data: Partial<{ username: string; nama_lengkap: string }>): Promise<void> => {
+    await fetchAPI(`/admin/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Delete admin
+  delete: async (id: number): Promise<void> => {
+    await fetchAPI(`/admin/${id}`, {
+      method: "DELETE",
+    });
   },
 };
 
@@ -224,6 +254,30 @@ export const jenisBarangAPI = {
     const result = await fetchAPI<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string }>(`/jenis-barang/kode/${kode}`);
     return result.data || null;
   },
+
+  // Create jenis barang
+  create: async (data: { kode_jenis: string; nama_jenis: string; deskripsi?: string }): Promise<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string }> => {
+    const result = await fetchAPI<{ id: number; kode_jenis: string; nama_jenis: string; deskripsi?: string; created_at: string }>("/jenis-barang", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return result.data!;
+  },
+
+  // Update jenis barang
+  update: async (id: number, data: Partial<{ kode_jenis: string; nama_jenis: string; deskripsi: string }>): Promise<void> => {
+    await fetchAPI(`/jenis-barang/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Delete jenis barang
+  delete: async (id: number): Promise<void> => {
+    await fetchAPI(`/jenis-barang/${id}`, {
+      method: "DELETE",
+    });
+  },
 };
 
 // Guru API
@@ -244,6 +298,30 @@ export const guruAPI = {
   getByNip: async (nip: string): Promise<{ id: number; nip: string; name: string; created_at: string } | null> => {
     const result = await fetchAPI<{ id: number; nip: string; name: string; created_at: string }>(`/guru/nip/${nip}`);
     return result.data || null;
+  },
+
+  // Create teacher
+  create: async (data: { nip: string; name: string }): Promise<{ id: number; nip: string; name: string; created_at: string }> => {
+    const result = await fetchAPI<{ id: number; nip: string; name: string; created_at: string }>("/guru", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return result.data!;
+  },
+
+  // Update teacher
+  update: async (id: number, data: Partial<{ nip: string; name: string }>): Promise<void> => {
+    await fetchAPI(`/guru/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Delete teacher
+  delete: async (id: number): Promise<void> => {
+    await fetchAPI(`/guru/${id}`, {
+      method: "DELETE",
+    });
   },
 };
 
@@ -277,6 +355,30 @@ export const siswaAPI = {
   getByNis: async (nis: string): Promise<{ id: number; nis: string; name: string; kelas?: string; created_at: string } | null> => {
     const result = await fetchAPI<{ id: number; nis: string; name: string; kelas?: string; created_at: string }>(`/siswa/nis/${nis}`);
     return result.data || null;
+  },
+
+  // Create student
+  create: async (data: { nis: string; name: string; kelas: string }): Promise<{ id: number; nis: string; name: string; kelas: string; created_at: string }> => {
+    const result = await fetchAPI<{ id: number; nis: string; name: string; kelas: string; created_at: string }>("/siswa", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return result.data!;
+  },
+
+  // Update student
+  update: async (id: number, data: Partial<{ nis: string; name: string; kelas: string }>): Promise<void> => {
+    await fetchAPI(`/siswa/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Delete student
+  delete: async (id: number): Promise<void> => {
+    await fetchAPI(`/siswa/${id}`, {
+      method: "DELETE",
+    });
   },
 };
 
