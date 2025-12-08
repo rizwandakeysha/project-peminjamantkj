@@ -185,6 +185,23 @@ export const mockBorrowings: Borrowing[] = [
     created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
     nama_barang: "Tang Crimping RJ45",
   },
+  // Large multi-item borrowing from jenis TKJ-LTRR
+  {
+    id: 8,
+    kode_peminjaman: "PMJ-2025-008",
+    id_barang: 1,
+    nama_peminjam: "Kelompok Praktikum TKJ",
+    kontak: "081298765432",
+    keperluan: "Persiapan Kompetisi Jaringan",
+    guru_pendamping: "Pak Budi",
+    jumlah: 6,
+    foto_credential: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=400",
+    tanggal_pinjam: new Date().toISOString(),
+    tanggal_kembali: undefined,
+    status: 'Dipinjam',
+    created_at: new Date().toISOString(),
+    nama_barang: "Multiple Items (TKJ-LTRR)",
+  },
 ];
 
 // Available classes
@@ -534,4 +551,35 @@ export const mockBarang = [
     status: "Tersedia",
     created_at: new Date().toISOString(),
   },
+];
+
+// Detail peminjaman (one borrowing can have multiple items)
+export const mockDetailPeminjaman = [
+  // borrowing id 1: Ahmad Fauzi borrowed 2 items (id 1 x1, id 3 x1)
+  { peminjaman_id: 1, id_barang: 1, kode_barang: "BRG-001", nama_barang: "Tang Crimping RJ45", jumlah: 1 },
+  { peminjaman_id: 1, id_barang: 3, kode_barang: "BRG-003", nama_barang: "Obeng Set", jumlah: 1 },
+
+  // borrowing id 2: Siti returned previously (single item)
+  { peminjaman_id: 2, id_barang: 3, kode_barang: "BRG-003", nama_barang: "Obeng Set", jumlah: 1 },
+
+  // borrowing id 3: Rini borrowed 3 of item id 2
+  { peminjaman_id: 3, id_barang: 2, kode_barang: "BRG-002", nama_barang: "Kabel Tester", jumlah: 3 },
+
+  // borrowing id 4: Ari borrowed LAN Tester
+  { peminjaman_id: 4, id_barang: 4, kode_barang: "BRG-004", nama_barang: "LAN Tester", jumlah: 1 },
+
+  // borrowing id 5: Dewi borrowed two different items
+  { peminjaman_id: 5, id_barang: 5, kode_barang: "BRG-005", nama_barang: "Kabel UTP Cat6 (Roll)", jumlah: 1 },
+  { peminjaman_id: 5, id_barang: 6, kode_barang: "BRG-006", nama_barang: "RJ45 Connector (Box)", jumlah: 1 },
+
+  // others
+  { peminjaman_id: 6, id_barang: 6, kode_barang: "BRG-006", nama_barang: "RJ45 Connector (Box)", jumlah: 5 },
+  { peminjaman_id: 7, id_barang: 1, kode_barang: "BRG-001", nama_barang: "Tang Crimping RJ45", jumlah: 1 },
+  // details for borrowing id 8 (many items from TKJ-LTRR)
+  { peminjaman_id: 8, id_barang: 1, kode_barang: "BRG-001", nama_barang: "Router Cisco 2911", jumlah: 1 },
+  { peminjaman_id: 8, id_barang: 2, kode_barang: "BRG-002", nama_barang: "Network Switch 24 Port Cisco", jumlah: 1 },
+  { peminjaman_id: 8, id_barang: 3, kode_barang: "BRG-003", nama_barang: "Tang Crimping RJ45 Profesional", jumlah: 1 },
+  { peminjaman_id: 8, id_barang: 4, kode_barang: "BRG-004", nama_barang: "Cable Tester Digital", jumlah: 1 },
+  { peminjaman_id: 8, id_barang: 5, kode_barang: "BRG-005", nama_barang: "Multimeter Digital Sanwa", jumlah: 1 },
+  { peminjaman_id: 8, id_barang: 6, kode_barang: "BRG-006", nama_barang: "Obeng Set Presisi 16 Pcs", jumlah: 1 },
 ];

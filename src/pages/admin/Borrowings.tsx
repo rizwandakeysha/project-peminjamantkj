@@ -23,6 +23,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Search, Download, Eye, Trash2, Calendar, ChevronsUpDown } from "lucide-react";
 import { Borrowing } from "@/types";
+import { mockBorrowings, mockDetailPeminjaman, mockBarang, mockJenisBarang } from "@/lib/mockData";
 import { toast } from "react-hot-toast";
 import { peminjamanAPI } from "@/lib/api";
 import {
@@ -72,7 +73,9 @@ const Borrowings = () => {
         setBorrowings(data);
       } catch (error) {
         console.error("Error fetching borrowings:", error);
-        toast.error("Gagal memuat data peminjaman");
+        toast.error("Gagal memuat data peminjaman — menggunakan data dummy");
+        // fallback to mock data for dev mode
+        setBorrowings(mockBorrowings as Borrowing[]);
       } finally {
         setLoading(false);
       }
@@ -233,11 +236,17 @@ const Borrowings = () => {
       "Guru Pendamping",
       "Status",
     ];
-    const csvContent = [
-      headers.join(","),
-      ...sortedBorrowings.map((borrowing, index) =>
-        [
-          index + 1,
+
+    const rows: string[] = [];
+    rows.push(headers.join(","));
+
+    let globalIndex = 0;
+    for (const borrowing of sortedBorrowings) {
+      const details = mockDetailPeminjaman.filter((d) => d.peminjaman_id === borrowing.id);
+      if (details.length === 0) {
+        globalIndex++;
+        rows.push([
+          globalIndex,
           borrowing.kode_peminjaman,
           new Date(borrowing.tanggal_pinjam).toLocaleDateString("id-ID"),
           borrowing.tanggal_kembali
@@ -250,9 +259,32 @@ const Borrowings = () => {
           `"${borrowing.keperluan}"`,
           `"${borrowing.guru_pendamping}"`,
           borrowing.status,
-        ].join(",")
-      ),
-    ].join("\n");
+        ].join(","));
+      } else {
+        // multiple rows: first row contains borrower info, subsequent rows have empty borrower columns
+        for (let i = 0; i < details.length; i++) {
+          const d = details[i];
+          globalIndex++;
+          rows.push([
+            globalIndex,
+            borrowing.kode_peminjaman,
+            new Date(borrowing.tanggal_pinjam).toLocaleDateString("id-ID"),
+            borrowing.tanggal_kembali
+              ? new Date(borrowing.tanggal_kembali).toLocaleDateString("id-ID")
+              : "-",
+            i === 0 ? `"${borrowing.nama_peminjam}"` : "",
+            i === 0 ? (borrowing.kontak || "-") : "",
+            `"${d.nama_barang}"`,
+            d.jumlah,
+            i === 0 ? `"${borrowing.keperluan}"` : "",
+            i === 0 ? `"${borrowing.guru_pendamping}"` : "",
+            i === 0 ? borrowing.status : "",
+          ].join(","));
+        }
+      }
+    }
+
+    const csvContent = rows.join("\n");
 
     const blob = new Blob(["\uFEFF" + csvContent], {
       type: "text/csv;charset=utf-8;",
@@ -272,43 +304,109 @@ const Borrowings = () => {
     doc.setFontSize(14);
     doc.text("Data Peminjaman Barang", 14, 15);
 
-    const tableColumn = [
-      "No",
-      "Kode Peminjaman",
-      "Nama Peminjam",
-      "Kontak",
-      "Barang",
-      "Jumlah",
-      "Keperluan",
-      "Guru Pendamping",
-      "Tanggal Pinjam",
-      "Tanggal Kembali",
-      "Status",
+    // use columns + object-body API
+    const columns = [
+      { header: "No", dataKey: "no" },
+      { header: "Kode Peminjaman", dataKey: "kode" },
+      { header: "Nama Peminjam", dataKey: "nama" },
+      { header: "Kontak", dataKey: "kontak" },
+      { header: "Barang", dataKey: "barang" },
+      { header: "Keperluan", dataKey: "keperluan" },
+      { header: "Guru Pendamping", dataKey: "guru" },
+      { header: "Tanggal Pinjam", dataKey: "pinjam" },
+      { header: "Tanggal Kembali", dataKey: "kembali" },
+      { header: "Status", dataKey: "status" },
     ];
 
-    const tableRows = sortedBorrowings.map((b, i) => [
-      i + 1,
-      b.kode_peminjaman,
-      b.nama_peminjam,
-      b.kontak || "-",
-      b.nama_barang,
-      b.jumlah,
-      b.keperluan || "-",
-      b.guru_pendamping || "-",
-      new Date(b.tanggal_pinjam).toLocaleDateString("id-ID"),
-      b.tanggal_kembali
-        ? new Date(b.tanggal_kembali).toLocaleDateString("id-ID")
-        : "-",
-      b.status,
-    ]);
+    const bodyRows: any[] = [];
+    let rowCounter = 0;
+
+    for (const b of sortedBorrowings) {
+      const details = mockDetailPeminjaman.filter((d) => d.peminjaman_id === b.id);
+      const datePinjam = new Date(b.tanggal_pinjam).toLocaleDateString("id-ID");
+      const dateKembali = b.tanggal_kembali ? new Date(b.tanggal_kembali).toLocaleDateString("id-ID") : "-";
+
+      if (details.length === 0) {
+        rowCounter++;
+        bodyRows.push({
+          no: rowCounter,
+          kode: b.kode_peminjaman,
+          nama: b.nama_peminjam,
+          kontak: b.kontak || "-",
+          barang: b.nama_barang,
+          keperluan: b.keperluan || "-",
+          guru: b.guru_pendamping || "-",
+          pinjam: datePinjam,
+          kembali: dateKembali,
+          status: b.status,
+        });
+      } else {
+        for (let i = 0; i < details.length; i++) {
+          const d = details[i];
+          rowCounter++;
+          if (i === 0) {
+            // first row: include borrower fields and a hidden grouping marker
+            bodyRows.push({
+              __groupId: b.id,
+              __groupSize: details.length,
+              no: rowCounter,
+              kode: b.kode_peminjaman,
+              nama: b.nama_peminjam,
+              kontak: b.kontak || "-",
+              barang: d.nama_barang,
+              keperluan: b.keperluan || "-",
+              guru: b.guru_pendamping || "-",
+              pinjam: datePinjam,
+              kembali: dateKembali,
+              status: b.status,
+            });
+          } else {
+            // subsequent rows: only barang is filled; other fields empty
+            bodyRows.push({
+              __groupId: b.id,
+              __groupSize: details.length,
+              no: "",
+              kode: "",
+              nama: "",
+              kontak: "",
+              barang: d.nama_barang,
+              keperluan: "",
+              guru: "",
+              pinjam: "",
+              kembali: "",
+              status: "",
+            });
+          }
+        }
+      }
+    }
+
+    // helpful debugging in browser console when export is triggered
+    // eslint-disable-next-line no-console
+    console.log("PDF export bodyRows:", bodyRows);
 
     autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
+      columns,
+      body: bodyRows,
       startY: 25,
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [78, 52, 46] }, // warna coklat tua (#4e342e)
+      headStyles: { fillColor: [78, 52, 46] },
       theme: "grid",
+      didParseCell: function (data) {
+        // only apply rowSpan for body cells that belong to a grouped borrowing
+        if (data.section === "body") {
+          const raw = data.row.raw as any;
+          if (raw && raw.__groupId && raw.__groupSize && raw.__groupSize > 1) {
+            // columns to merge vertically on grouped rows (all borrower-related cols)
+            const mergeKeys = ["no", "kode", "nama", "kontak", "keperluan", "guru", "pinjam", "kembali", "status"];
+            const key = data.column.dataKey as string;
+            // first row of group has actual content for these keys; detect via raw[key] !== ''
+            if (mergeKeys.includes(key) && raw[key] !== "") {
+              data.cell.rowSpan = raw.__groupSize;
+            }
+          }
+        }
+      },
     });
 
     doc.save(`Data_Peminjaman_${new Date().toISOString().split("T")[0]}.pdf`);
@@ -834,6 +932,32 @@ const Borrowings = () => {
                     >
                       {selectedBorrowing.status}
                     </Badge>
+                  </div>
+                </div>
+
+                {/* Detail list of items for this borrowing (detail_peminjaman) */}
+                <div>
+                  <h4 className="font-semibold mb-3">Daftar Barang dalam Transaksi</h4>
+                  <div className="space-y-2">
+                    {mockDetailPeminjaman
+                      .filter((d) => d.peminjaman_id === selectedBorrowing.id)
+                      .map((d) => {
+                        const item = mockBarang.find((b) => b.id_barang === d.id_barang);
+                        const jenis = item ? mockJenisBarang.find((j) => j.id_jenis_barang === item.id_jenis_barang) : undefined;
+                        return (
+                          <div key={`${d.peminjaman_id}-${d.id_barang}`} className="flex items-center gap-3 p-2 border rounded">
+                            {item?.foto_barang && (
+                              <img src={item.foto_barang} alt={d.nama_barang} className="w-16 h-16 object-cover rounded" />
+                            )}
+                            <div className="flex-1">
+                              <div className="font-medium">{d.nama_barang}</div>
+                              <div className="text-xs text-muted-foreground">Kode: <code className="font-mono">{d.kode_barang}</code></div>
+                              {jenis && <div className="text-xs text-muted-foreground">Jenis: {jenis.nama_jenis_barang}</div>}
+                            </div>
+                            <div className="text-sm">x{d.jumlah}</div>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
 
