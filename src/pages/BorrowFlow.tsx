@@ -117,6 +117,11 @@ const BorrowFlow = () => {
   const [openGuruPendamping, setOpenGuruPendamping] = useState(false);
   const [searchGuruPendamping, setSearchGuruPendamping] = useState("");
 
+  // Refs to sync popover width with trigger
+  const kelasTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const namaTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const guruTriggerRef = useRef<HTMLButtonElement | null>(null);
+
   // Summary state
   const [borrowingCode, setBorrowingCode] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -609,6 +614,7 @@ const BorrowFlow = () => {
                         <Popover open={openKelas} onOpenChange={setOpenKelas}>
                           <PopoverTrigger asChild>
                             <Button
+                              ref={kelasTriggerRef}
                               variant="outline"
                               role="combobox"
                               className="mt-1 w-full justify-between"
@@ -617,7 +623,13 @@ const BorrowFlow = () => {
                               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent className="w-full p-0">
+                          <PopoverContent
+                            side="bottom"
+                            align="start"
+                            sideOffset={4}
+                            className="p-0"
+                            style={{ width: kelasTriggerRef.current?.offsetWidth }}
+                          >
                             <Command>
                               <CommandInput
                                 placeholder="Cari kelas..."
@@ -668,6 +680,7 @@ const BorrowFlow = () => {
                       >
                         <PopoverTrigger asChild>
                           <Button
+                            ref={namaTriggerRef}
                             id="nama"
                             variant="outline"
                             role="combobox"
@@ -687,7 +700,13 @@ const BorrowFlow = () => {
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-full p-0">
+                        <PopoverContent
+                          side="bottom"
+                          align="start"
+                          sideOffset={4}
+                          className="p-0"
+                          style={{ width: namaTriggerRef.current?.offsetWidth }}
+                        >
                           <Command>
                             <CommandInput
                               placeholder={
@@ -829,6 +848,7 @@ const BorrowFlow = () => {
                       >
                         <PopoverTrigger asChild>
                           <Button
+                            ref={guruTriggerRef}
                             variant="outline"
                             role="combobox"
                             className="mt-1 w-full justify-between"
@@ -844,7 +864,13 @@ const BorrowFlow = () => {
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-full p-0">
+                        <PopoverContent
+                          side="bottom"
+                          align="start"
+                          sideOffset={4}
+                          className="p-0"
+                          style={{ width: guruTriggerRef.current?.offsetWidth }}
+                        >
                           <Command>
                             <CommandInput
                               placeholder="Cari guru..."

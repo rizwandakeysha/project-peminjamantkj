@@ -11,6 +11,10 @@ export interface Item {
   id_jenis_barang?: number;
   kode_jenis?: string;
   nama_jenis?: string;
+  // Optional stock fields kept for legacy/mock admin screens
+  jumlah_stok?: number;
+  jumlah_dipinjam?: number;
+  notes?: string;
   created_at: string;
 }
 
