@@ -9,6 +9,7 @@ import ReturnFlow from "./pages/ReturnFlow";
 import Dashboard from "./pages/admin/Dashboard";
 import Items from "./pages/admin/Items";
 import Borrowings from "./pages/admin/Borrowings";
+import Users from "./pages/admin/Users";
 import AdminLogin from "./pages/admin/Login";
 import RequireAuth from "@/components/RequireAuth";
 import NotFound from "./pages/NotFound";
@@ -68,6 +69,14 @@ const App = () => (
             element={
               <RequireAuth>
                 <Borrowings />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin-tkj/users"
+            element={
+              <RequireAuth>
+                <Users />
               </RequireAuth>
             }
           />

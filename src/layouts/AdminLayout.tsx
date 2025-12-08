@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Package, ClipboardList, Home, LogOut } from "lucide-react";
+import { Package, ClipboardList, Home, LogOut, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { clearAdminToken } from "@/lib/auth";
 
@@ -89,6 +89,16 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             <Link to="/admin-tkj/borrowings">
               <ClipboardList className="h-4 w-4 mr-2" />
               Peminjaman
+            </Link>
+          </Button>
+          <Button
+            variant={isActive("/admin-tkj/users") ? "default" : "ghost"}
+            size="sm"
+            asChild
+          >
+            <Link to="/admin-tkj/users">
+              <Users className="h-4 w-4 mr-2" />
+              Pengguna
             </Link>
           </Button>
         </nav>

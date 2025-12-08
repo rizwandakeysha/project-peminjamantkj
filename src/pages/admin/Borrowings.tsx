@@ -23,9 +23,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Search, Download, Eye, Trash2, Calendar, ChevronsUpDown } from "lucide-react";
 import { Borrowing } from "@/types";
-import { mockBorrowings, mockDetailPeminjaman, mockBarang, mockJenisBarang } from "@/lib/mockData";
+import { mockDetailPeminjaman, mockBarang, mockJenisBarang, mockBorrowingsExtended } from "@/lib/mockData";
 import { toast } from "react-hot-toast";
-import { peminjamanAPI } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -66,22 +65,12 @@ const Borrowings = () => {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
-    const fetchBorrowings = async () => {
-      try {
-        setLoading(true);
-        const data = await peminjamanAPI.getAll();
-        setBorrowings(data);
-      } catch (error) {
-        console.error("Error fetching borrowings:", error);
-        toast.error("Gagal memuat data peminjaman — menggunakan data dummy");
-        // fallback to mock data for dev mode
-        setBorrowings(mockBorrowings as Borrowing[]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchBorrowings();
+    // Use mock data for borrowings
+    setLoading(true);
+    setTimeout(() => {
+      setBorrowings(mockBorrowingsExtended as any);
+      setLoading(false);
+    }, 300);
   }, []);
 
   const filteredBorrowings = borrowings.filter((borrowing) => {
@@ -179,6 +168,10 @@ const Borrowings = () => {
           return obj.status || "";
         case "guru_pendamping":
           return obj.guru_pendamping || "";
+        case "keperluan":
+          return obj.keperluan || "";
+        case "jenis_barang":
+          return obj.jenis_barang || "";
         default:
           return obj[key] || "";
       }
@@ -210,16 +203,11 @@ const Borrowings = () => {
 
   const handleDelete = async () => {
     if (!itemToDelete) return;
-    try {
-      await peminjamanAPI.delete(itemToDelete);
-      setBorrowings(borrowings.filter((b) => b.id !== itemToDelete));
-      setDeleteDialogOpen(false);
-      setItemToDelete(null);
-      toast.success("Data peminjaman berhasil dihapus!");
-    } catch (error) {
-      console.error("Error deleting borrowing:", error);
-      toast.error("Gagal menghapus data peminjaman");
-    }
+    // Mock delete - just remove from state
+    setBorrowings(borrowings.filter((b) => b.id !== itemToDelete));
+    setDeleteDialogOpen(false);
+    setItemToDelete(null);
+    toast.success("Data peminjaman berhasil dihapus!");
   };
 
   const exportToCSV = () => {
@@ -632,271 +620,252 @@ const Borrowings = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
+            <div className="w-full">
+              <Table className="table-fixed w-full">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>No</TableHead>
-                    <TableHead>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2"
+                    <TableHead className="w-[3%]">No</TableHead>
+                    <TableHead className="w-[5%]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8"
                         onClick={() => handleSort("kode_peminjaman")}
                       >
                         Kode
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                        {sortBy === "kode_peminjaman" && (
-                          <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                        )}
-                      </button>
+                        <ChevronsUpDown className="ml-1 h-3 w-3" />
+                      </Button>
                     </TableHead>
-
-                    <TableHead>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2"
+                    <TableHead className="w-[5%]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-5 h-8"
                         onClick={() => handleSort("tanggal_pinjam")}
                       >
-                        Tanggal
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                        {sortBy === "tanggal_pinjam" && (
-                          <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                        )}
-                      </button>
+                        Pinjam
+                        <ChevronsUpDown className="ml-1 h-3 w-3" />
+                      </Button>
                     </TableHead>
-
-                    <TableHead>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2"
+                    <TableHead className="w-[5%]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-5 h-8"
                         onClick={() => handleSort("tanggal_kembali")}
                       >
-                        Tgl Kembali
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                        {sortBy === "tanggal_kembali" && (
-                          <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                        )}
-                      </button>
+                        Kembali
+                        <ChevronsUpDown className="ml-1 h-3 w-3" />
+                      </Button>
                     </TableHead>
-
-                    <TableHead>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2"
+                    <TableHead className="w-[8%]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8"
                         onClick={() => handleSort("nama_peminjam")}
                       >
                         Peminjam
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                        {sortBy === "nama_peminjam" && (
-                          <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                        )}
-                      </button>
+                        <ChevronsUpDown className="ml-1 h-3 w-3" />
+                      </Button>
                     </TableHead>
-
-                    <TableHead>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2"
+                    <TableHead className="w-[5%]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8"
                         onClick={() => handleSort("guru_pendamping")}
                       >
                         Guru
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                        {sortBy === "guru_pendamping" && (
-                          <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                        )}
-                      </button>
+                        <ChevronsUpDown className="ml-1 h-3 w-3" />
+                      </Button>
                     </TableHead>
-
-                    <TableHead>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2"
-                        onClick={() => handleSort("nama_barang")}
+                    <TableHead className="w-[5%]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8"
+                        onClick={() => handleSort("jenis_barang")}
                       >
-                        Barang
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                        {sortBy === "nama_barang" && (
-                          <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                        )}
-                      </button>
+                        Jenis
+                        <ChevronsUpDown className="ml-1 h-3 w-3" />
+                      </Button>
                     </TableHead>
-
-                    <TableHead>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2"
-                        onClick={() => handleSort("jumlah")}
+                    <TableHead className="w-[7%]">Barang</TableHead>
+                    <TableHead className="w-[8%]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8"
+                        onClick={() => handleSort("keperluan")}
                       >
-                        Jumlah
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                        {sortBy === "jumlah" && (
-                          <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                        )}
-                      </button>
+                        Keperluan
+                        <ChevronsUpDown className="ml-1 h-3 w-3" />
+                      </Button>
                     </TableHead>
-
-                    <TableHead>
-                      <button
-                        type="button"
-                        className="flex items-center gap-2"
+                    <TableHead className="w-[7%]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-ml-3 h-8"
                         onClick={() => handleSort("status")}
                       >
                         Status
-                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground" />
-                        {sortBy === "status" && (
-                          <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                        )}
-                      </button>
+                        <ChevronsUpDown className="ml-1 h-3 w-3" />
+                      </Button>
                     </TableHead>
-                    <TableHead className="text-right">Aksi</TableHead>
+                    <TableHead className="text-right w-[5%]">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedBorrowings.map((borrowing, index) => (
-                    <TableRow key={borrowing.id}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>
-                        <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                          {borrowing.kode_peminjaman}
-                        </code>
-                      </TableCell>
+                  {sortedBorrowings.map((borrowing: any, index) => {
+                    const details = mockDetailPeminjaman.filter((d) => (borrowing.detail_ids || []).includes(d.peminjaman_id));
+                    const firstDetail = details.length > 0 ? details[0] : null;
+                    const firstItem = firstDetail ? mockBarang.find((b) => b.id_barang === firstDetail.id_barang) : null;
+                    const jenis = firstItem ? mockJenisBarang.find((j) => j.id_jenis_barang === firstItem.id_jenis_barang) : null;
 
-                      <TableCell>
-                        <div className="text-sm">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3 text-muted-foreground" />
-                            {new Date(
-                              borrowing.tanggal_pinjam
-                            ).toLocaleDateString("id-ID", {
+                    return (
+                      <TableRow key={borrowing.id}>
+                        <TableCell className="text-center text-sm p-2">{index + 1}</TableCell>
+
+                        <TableCell className="p-2">
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono break-all">
+                            {borrowing.kode_peminjaman}
+                          </code>
+                        </TableCell>
+
+                        <TableCell className="p-2">
+                          <div className="text-xs">
+                            {new Date(borrowing.tanggal_pinjam).toLocaleDateString("id-ID", {
                               day: "2-digit",
                               month: "short",
-                              year: "numeric",
+                              year: "2-digit",
                             })}
                           </div>
-                        </div>
-                      </TableCell>
+                        </TableCell>
 
-                      <TableCell>
-                        {borrowing.tanggal_kembali ? (
-                          <div className="text-sm">
-                            {new Date(
-                              borrowing.tanggal_kembali
-                            ).toLocaleDateString("id-ID", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-muted-foreground">-</div>
-                        )}
-                      </TableCell>
-
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {borrowing.foto_credential && (
-                            <img
-                              src={borrowing.foto_credential}
-                              alt={borrowing.nama_peminjam}
-                              className="w-8 h-8 rounded-full object-cover"
-                            />
+                        <TableCell className="p-2">
+                          {borrowing.tanggal_kembali ? (
+                            <div className="text-xs">
+                              {new Date(borrowing.tanggal_kembali).toLocaleDateString("id-ID", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "2-digit",
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">-</div>
                           )}
-                          <div>
-                            <div className="font-medium">
-                              {borrowing.nama_peminjam}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {borrowing.kontak}
+                        </TableCell>
+
+                        <TableCell className="p-2">
+                          <div className="flex items-start gap-2">
+                            {borrowing.foto_credential && (
+                              <img
+                                src={borrowing.foto_credential}
+                                alt={borrowing.nama_peminjam}
+                                className="w-8 h-8 rounded-full object-cover aspect-square flex-shrink-0"
+                              />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-xs break-words">{borrowing.nama_peminjam}</div>
+                              <div className="text-xs text-muted-foreground">{borrowing.nip_nis}</div>
                             </div>
                           </div>
-                        </div>
-                      </TableCell>
+                        </TableCell>
 
-                      <TableCell className="text-sm">{borrowing.guru_pendamping || "-"}</TableCell>
+                        <TableCell className="text-xs p-2 break-words">
+                          {borrowing.guru_pendamping || "-"}
+                        </TableCell>
 
-                      <TableCell>
-                        <div className="font-medium">
-                          {borrowing.nama_barang}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
+                        <TableCell className="p-2">
+                          {jenis ? (
+                            <div>
+                              <div className="font-medium text-xs break-words">{jenis.nama_jenis_barang}</div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+
+                        <TableCell className="p-2">
+                          {details.length > 0 ? (
+                            <ul className="list-disc list-inside text-xs space-y-0.5">
+                              {details.map((d) => (
+                                <li key={`${borrowing.id}-${d.id_barang}`} className="break-words">
+                                  {d.nama_barang}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
+
+                        <TableCell className="text-xs p-2 break-words">
                           {borrowing.keperluan}
-                        </div>
-                      </TableCell>
+                        </TableCell>
 
-                      <TableCell className="font-medium">{borrowing.jumlah}x</TableCell>
-
-                      <TableCell>
-                        <Badge
-                          variant={
-                            borrowing.status === "Dipinjam"
-                              ? "default"
-                              : "secondary"
-                          }
-                          className={
-                            borrowing.status === "Dipinjam"
-                              ? "bg-warning"
-                              : "bg-success"
-                          }
-                        >
-                          {borrowing.status}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="flex gap-1 justify-end">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleViewDetail(borrowing)}
+                        <TableCell>
+                          <Badge
+                            variant={borrowing.status === "Dipinjam" ? "default" : "secondary"}
+                            className={borrowing.status === "Dipinjam" ? "bg-warning" : "bg-success"}
                           >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <AlertDialog
-                            open={
-                              deleteDialogOpen && itemToDelete === borrowing.id
-                            }
-                            onOpenChange={(open) => {
-                              setDeleteDialogOpen(open);
-                              if (!open) setItemToDelete(null);
-                            }}
-                          >
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => setItemToDelete(borrowing.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Konfirmasi Hapus Peminjaman
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Apakah Anda yakin ingin menghapus data
-                                  peminjaman{" "}
-                                  <strong>{borrowing.kode_peminjaman}</strong>?
-                                  Tindakan ini tidak dapat dibatalkan.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Batal</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={handleDelete}
-                                  className="bg-destructive hover:bg-destructive/90"
+                            {borrowing.status}
+                          </Badge>
+                        </TableCell>
+
+                        <TableCell className="text-right">
+                          <div className="flex gap-1 justify-end">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleViewDetail(borrowing as Borrowing)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog
+                              open={deleteDialogOpen && itemToDelete === borrowing.id}
+                              onOpenChange={(open) => {
+                                setDeleteDialogOpen(open);
+                                if (!open) setItemToDelete(null);
+                              }}
+                            >
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => setItemToDelete(borrowing.id)}
                                 >
-                                  Hapus
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Konfirmasi Hapus Peminjaman</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Apakah Anda yakin ingin menghapus data peminjaman{" "}
+                                    <strong>{borrowing.kode_peminjaman}</strong>?
+                                    Tindakan ini tidak dapat dibatalkan.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={handleDelete}
+                                    className="bg-destructive hover:bg-destructive/90"
+                                  >
+                                    Hapus
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
