@@ -24,6 +24,8 @@ exports.getAllPeminjaman = async (req, res) => {
                  'nama_barang', b.nama_barang,
                  'kode_barang', b.kode_barang,
                  'foto_barang', b.foto_barang,
+                 'id_jenis_barang', jb.id_jenis_barang,
+                 'nama_jenis_barang', jb.nama_jenis_barang,
                  'status', dp.status,
                  'tanggal_kembali', dp.tanggal_kembali,
                  'foto_bukti_kembali', dp.foto_bukti_kembali
@@ -32,6 +34,7 @@ exports.getAllPeminjaman = async (req, res) => {
       FROM peminjaman p
       LEFT JOIN detail_peminjaman dp ON p.id_peminjaman = dp.id_peminjaman
       LEFT JOIN barang b ON dp.id_barang = b.id_barang
+      LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
     `;
     
     const params = [];
@@ -75,6 +78,8 @@ exports.getPeminjamanByCode = async (req, res) => {
                   'nama_barang', b.nama_barang,
                   'kode_barang', b.kode_barang,
                   'foto_barang', b.foto_barang,
+                  'id_jenis_barang', jb.id_jenis_barang,
+                  'nama_jenis_barang', jb.nama_jenis_barang,
                   'status', dp.status,
                   'tanggal_kembali', dp.tanggal_kembali,
                   'foto_bukti_kembali', dp.foto_bukti_kembali
@@ -83,6 +88,7 @@ exports.getPeminjamanByCode = async (req, res) => {
        FROM peminjaman p
        LEFT JOIN detail_peminjaman dp ON p.id_peminjaman = dp.id_peminjaman
        LEFT JOIN barang b ON dp.id_barang = b.id_barang
+       LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
        WHERE p.kode_peminjaman = $1
        GROUP BY p.id_peminjaman`,
       [kode]
@@ -129,19 +135,11 @@ exports.createPeminjaman = async (req, res) => {
     // Validate required fields
     if (!nama_peminjam || !keperluan || !items || items.length === 0) {
       await client.query('ROLLBACK');
-      console.error('Missing required fields:', {
-        nama_peminjam, keperluan, items
-      });
       return res.status(400).json({
         success: false,
         message: 'Semua field wajib harus diisi (nama_peminjam, keperluan, items array)',
       });
     }
-
-    // Debug log
-    console.log('Creating peminjaman with data:', {
-      nama_peminjam, kontak, keperluan, guru_pendamping, items
-    });
 
     // Validate all items exist and are available
     for (const item of items) {

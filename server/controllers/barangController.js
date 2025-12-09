@@ -5,7 +5,8 @@ exports.getAllBarang = async (req, res) => {
   try {
     const result = await db.query(
       `SELECT 
-        b.id_barang as id, 
+        b.id_barang as id,
+        b.id_barang,
         b.kode_barang, 
         b.nama_barang, 
         b.foto_barang, 
@@ -41,7 +42,8 @@ exports.getBarangById = async (req, res) => {
     const { id } = req.params;
     const result = await db.query(
       `SELECT 
-        b.id_barang as id, 
+        b.id_barang as id,
+        b.id_barang,
         b.kode_barang, 
         b.nama_barang, 
         b.foto_barang, 

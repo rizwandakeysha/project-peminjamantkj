@@ -36,12 +36,12 @@ async function createAdmin() {
     }
     
     // Check if username exists
-    const [existing] = await db.query(
-      'SELECT * FROM admin WHERE username = ?',
+    const existing = await db.query(
+      'SELECT * FROM admin WHERE username = $1',
       [username]
     );
     
-    if (existing.length > 0) {
+    if (existing.rows.length > 0) {
       console.error(`❌ Username '${username}' sudah digunakan!`);
       rl.close();
       process.exit(1);
@@ -53,13 +53,13 @@ async function createAdmin() {
     
     // Insert to database
     console.log('⏳ Menyimpan ke database...');
-    const [result] = await db.query(
-      'INSERT INTO admin (username, password, nama_lengkap) VALUES (?, ?, ?)',
+    const result = await db.query(
+      'INSERT INTO admin (username, password, nama_lengkap) VALUES ($1, $2, $3) RETURNING id_admin',
       [username, hashedPassword, namaLengkap]
     );
     
     console.log('\n✅ Admin berhasil dibuat!\n');
-    console.log('ID:', result.insertId);
+    console.log('ID:', result.rows[0].id_admin);
     console.log('Username:', username);
     console.log('Nama Lengkap:', namaLengkap);
     console.log('\n⚠️  Simpan password Anda dengan aman!\n');

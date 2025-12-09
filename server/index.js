@@ -51,8 +51,9 @@ app.use(cors({
 // MIDDLEWARE - AFTER CORS
 // ============================================
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase payload size limit for images
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
