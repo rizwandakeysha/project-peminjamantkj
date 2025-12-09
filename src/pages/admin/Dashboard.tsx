@@ -13,7 +13,6 @@ import {
   UserCheck,
 } from "lucide-react";
 import { barangAPI, peminjamanAPI, guruAPI, siswaAPI } from "@/lib/api";
-import { mockItems, mockBorrowings, mockTeachers, mockStudents } from "@/lib/mockData";
 import { toast } from "react-hot-toast";
 
 const Dashboard = () => {
@@ -22,6 +21,8 @@ const Dashboard = () => {
     total_jenis_barang: 0,
     total_tersedia: 0,
     total_dipinjam: 0,
+    items_sedang_dipinjam: 0,
+    items_sudah_dikembalikan: 0,
     peminjaman_hari_ini: 0,
     peminjaman_bulan_ini: 0,
     total_siswa: 0,
@@ -29,34 +30,39 @@ const Dashboard = () => {
     active_peminjaman: 0,
     completed_peminjaman: 0,
   });
-  const [borrowings, setBorrowings] = useState(mockBorrowings);
+  const [borrowings, setBorrowings] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [barangData, peminjamanData, guruData, siswaData] = await Promise.all([
-          barangAPI.getAll(),
-          peminjamanAPI.getAll(),
-          guruAPI.getAll().catch(() => []),
-          siswaAPI.getAll().catch(() => []),
-        ]);
-        
-        // Use API data or fallback to mock data
-        const barang = barangData && barangData.length > 0 ? barangData : mockItems;
-        const peminjaman = peminjamanData && peminjamanData.length > 0 ? peminjamanData : mockBorrowings;
-        const guruList = Array.isArray(guruData) && guruData.length > 0 ? guruData : mockTeachers;
-        const siswaList = Array.isArray(siswaData) && siswaData.length > 0 ? siswaData : mockStudents;
-        
+        const [barangData, peminjamanData, guruData, siswaData] =
+          await Promise.all([
+            barangAPI.getAll(),
+            peminjamanAPI.getAll(),
+            guruAPI.getAll().catch(() => []),
+            siswaAPI.getAll().catch(() => []),
+          ]);
+
+        // Use only API data (no fallback to mock)
+        const barang = barangData || [];
+        const peminjaman = peminjamanData || [];
+        const guruList = guruData || [];
+        const siswaList = siswaData || [];
+
         setBorrowings(peminjaman);
-        
+
         // Calculate stats from actual API data
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
-        const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-        
+
+        const thisMonthStart = new Date(
+          today.getFullYear(),
+          today.getMonth(),
+          1
+        );
+
         // Count borrowings today and this month
         const peminjamanHariIni = peminjaman.filter((b: any) => {
           const borrowDate = new Date(b.tanggal_pinjam);
@@ -69,30 +75,57 @@ const Dashboard = () => {
           return borrowDate >= thisMonthStart && borrowDate <= today;
         }).length;
 
-        const activePeminjaman = peminjaman.filter((b: any) => b.status === 'Dipinjam').length;
-        const completedPeminjaman = peminjaman.filter((b: any) => b.status === 'Dikembalikan').length;
-
         // Calculate item stats from API
         const totalItems = barang.length;
-        
-        // Get unique jenis barang (try different field names since API might return different structure)
-        let totalJenisBarang = 0;
-        const jenisSet = new Set<string>();
+
+        // Get unique jenis barang from database
+        const jenisSet = new Set<number>();
         barang.forEach((item: any) => {
-          const kode = item.kode_jenis || item.kode_jenis_barang || item.id_jenis_barang;
-          if (kode) jenisSet.add(String(kode));
+          if (item.id_jenis_barang) {
+            jenisSet.add(item.id_jenis_barang);
+          }
         });
-        totalJenisBarang = jenisSet.size > 0 ? jenisSet.size : [...new Set(barang.map((i: any) => i.kode_jenis))].length;
-        
-        // Calculate available and borrowed items
-        const totalTersedia = barang.filter((b: any) => b.status === 'Tersedia').length;
-        const totalDipinjam = barang.filter((b: any) => b.status === 'Dipinjam').length;
+        const totalJenisBarang = jenisSet.size;
+
+        // Calculate available and borrowed items (by item status in database)
+        const totalTersedia = barang.filter(
+          (b: any) => b.status === "Tersedia"
+        ).length;
+        const totalDipinjam = barang.filter(
+          (b: any) => b.status === "Dipinjam"
+        ).length;
+
+        // Count items returned and still borrowed (from detail_peminjaman status)
+        let itemsSedangDipinjam = 0;
+        let itemsSudahDikembalikan = 0;
+
+        peminjaman.forEach((pmj: any) => {
+          if (pmj.detail_peminjaman && Array.isArray(pmj.detail_peminjaman)) {
+            pmj.detail_peminjaman.forEach((detail: any) => {
+              if (detail.status === "Dipinjam") {
+                itemsSedangDipinjam++;
+              } else if (detail.status === "Dikembalikan") {
+                itemsSudahDikembalikan++;
+              }
+            });
+          }
+        });
+
+        // Count active and completed transactions (based on status_transaksi)
+        const activePeminjaman = peminjaman.filter(
+          (b: any) => b.status_transaksi === "Dipinjam"
+        ).length;
+        const completedPeminjaman = peminjaman.filter(
+          (b: any) => b.status_transaksi === "Dikembalikan"
+        ).length;
 
         setStatistics({
           total_barang: totalItems,
           total_jenis_barang: totalJenisBarang,
           total_tersedia: totalTersedia,
           total_dipinjam: totalDipinjam,
+          items_sedang_dipinjam: itemsSedangDipinjam,
+          items_sudah_dikembalikan: itemsSudahDikembalikan,
           peminjaman_hari_ini: peminjamanHariIni,
           peminjaman_bulan_ini: peminjamanBulanIni,
           total_siswa: siswaList.length,
@@ -103,47 +136,6 @@ const Dashboard = () => {
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
         toast.error("Gagal memuat data dashboard");
-        
-        // Fallback to mock data
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-        
-        const peminjamanHariIni = mockBorrowings.filter((b) => {
-          const borrowDate = new Date(b.tanggal_pinjam);
-          borrowDate.setHours(0, 0, 0, 0);
-          return borrowDate.getTime() === today.getTime();
-        }).length;
-
-        const peminjamanBulanIni = mockBorrowings.filter((b) => {
-          const borrowDate = new Date(b.tanggal_pinjam);
-          return borrowDate >= thisMonthStart && borrowDate <= today;
-        }).length;
-
-        const activePeminjaman = mockBorrowings.filter((b) => b.status === 'Dipinjam').length;
-        const completedPeminjaman = mockBorrowings.filter((b) => b.status === 'Dikembalikan').length;
-
-        const totalItems = mockItems.length;
-        const totalJenisBayang = [...new Set(mockItems.map(i => i.kode_jenis))].length;
-        const totalTersedia = mockItems.reduce((sum, item) => sum + (item.jumlah_stok - item.jumlah_dipinjam), 0);
-        const totalDipinjam = mockItems.reduce((sum, item) => sum + item.jumlah_dipinjam, 0);
-
-        setStatistics({
-          total_barang: totalItems,
-          total_jenis_barang: totalJenisBayang,
-          total_tersedia: totalTersedia,
-          total_dipinjam: totalDipinjam,
-          peminjaman_hari_ini: peminjamanHariIni,
-          peminjaman_bulan_ini: peminjamanBulanIni,
-          total_siswa: mockStudents.length,
-          total_guru: mockTeachers.length,
-          active_peminjaman: activePeminjaman,
-          completed_peminjaman: completedPeminjaman,
-        });
-        
-        setBorrowings(mockBorrowings);
-      } finally {
         setLoading(false);
       }
     };
@@ -156,6 +148,8 @@ const Dashboard = () => {
     total_jenis_barang: totalJenisBarang,
     total_tersedia: totalAvailable,
     total_dipinjam: totalBorrowed,
+    items_sedang_dipinjam: itemsBeingBorrowed,
+    items_sudah_dikembalikan: itemsReturned,
     peminjaman_hari_ini: todayBorrowings,
     peminjaman_bulan_ini: monthBorrowings,
     total_siswa: totalSiswa,
@@ -199,7 +193,9 @@ const Dashboard = () => {
               <TrendingUp className="h-5 w-5 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{totalAvailable + totalBorrowed}</div>
+              <div className="text-3xl font-bold">
+                {totalAvailable + totalBorrowed}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {totalAvailable} tersedia, {totalBorrowed} dipinjam
               </p>
@@ -277,9 +273,9 @@ const Dashboard = () => {
               <ClipboardList className="h-5 w-5 text-warning" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{activeBorrowings}</div>
+              <div className="text-3xl font-bold">{itemsBeingBorrowed}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Transaksi aktif
+                Item dipinjam
               </p>
             </CardContent>
           </Card>
@@ -289,12 +285,12 @@ const Dashboard = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Sudah Dikembalikan
               </CardTitle>
-              <Users className="h-5 w-5 text-primary" />
+              <UserCheck className="h-5 w-5 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{completedBorrowings}</div>
+              <div className="text-3xl font-bold">{itemsReturned}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Transaksi selesai
+                Item dikembalikan
               </p>
             </CardContent>
           </Card>
@@ -351,44 +347,50 @@ const Dashboard = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {mockBorrowings.slice(0, 5).map((borrowing, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    {borrowing.foto_credential && (
-                      <img
-                        src={borrowing.foto_credential}
-                        alt={borrowing.nama_peminjam}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                    )}
-                    <div>
-                      <p className="font-medium">{borrowing.nama_peminjam}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {borrowing.nama_barang} ({borrowing.jumlah}x)
+            {borrowings.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">
+                Tidak ada data peminjaman
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {borrowings.slice(0, 5).map((borrowing, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      {borrowing.foto_credential && (
+                        <img
+                          src={borrowing.foto_credential}
+                          alt={borrowing.nama_peminjam}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <p className="font-medium">{borrowing.nama_peminjam}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {borrowing.detail_peminjaman?.length || 0} barang
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-mono font-medium">
+                        {borrowing.kode_peminjaman}
+                      </p>
+                      <p
+                        className={`text-xs ${
+                          borrowing.status_transaksi === "Dipinjam"
+                            ? "text-warning"
+                            : "text-success"
+                        }`}
+                      >
+                        {borrowing.status_transaksi}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-mono font-medium">
-                      {borrowing.kode_peminjaman}
-                    </p>
-                    <p
-                      className={`text-xs ${
-                        borrowing.status === "Dipinjam"
-                          ? "text-warning"
-                          : "text-success"
-                      }`}
-                    >
-                      {borrowing.status}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

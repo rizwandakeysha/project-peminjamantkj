@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Lock, LogIn } from "lucide-react";
-import { setAdminToken } from "@/lib/auth";
+import { setAdminToken, setAdminInfo } from "@/lib/auth";
+import { adminAPI } from "@/lib/api";
 import { toast } from "react-hot-toast";
 
 const AdminLogin = () => {
@@ -16,27 +17,42 @@ const AdminLogin = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError("");
 
     try {
-      // DUMMY MODE: Accept any username & password
-      if (username.trim() && password.trim()) {
-        // Generate dummy token
-        const dummyToken = `dummy-token-${Date.now()}`;
-        setAdminToken(dummyToken);
-        toast.success("Login berhasil! (Dummy Mode)");
+      if (!username.trim() || !password.trim()) {
+        toast.error("Username dan password harus diisi");
+        setLoading(false);
+        return;
+      }
+
+      // Call login API
+      const response = await adminAPI.login(username, password);
+
+      if (response && response.token) {
+        // Save token to localStorage
+        setAdminToken(response.token);
+
+        // Save admin info
+        setAdminInfo(response.admin);
+
+        toast.success(
+          `Login berhasil! Selamat datang ${response.admin.nama_lengkap}`
+        );
 
         const redirectTo =
           (location.state as any)?.from || "/admin-tkj/dashboard";
         navigate(redirectTo, { replace: true });
-      } else {
-        toast.error("Username dan password harus diisi");
       }
     } catch (err: any) {
-      toast.error("Terjadi kesalahan");
+      const errorMessage = err?.message || "Terjadi kesalahan saat login";
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -58,9 +74,11 @@ const AdminLogin = () => {
                 <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
-                  placeholder="Masukkan username apapun"
+                  placeholder="Masukkan username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  disabled={loading}
+                  autoFocus
                   required
                 />
               </div>
@@ -69,23 +87,34 @@ const AdminLogin = () => {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Masukkan password apapun"
+                  placeholder="Masukkan password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
                   required
                 />
               </div>
+
+              {error && (
+                <Alert className="bg-red-50 border-red-200">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-900 text-sm">
+                    {error}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <Button type="submit" className="w-full" disabled={loading}>
                 <LogIn className="h-4 w-4 mr-2" />
                 {loading ? "Masuk..." : "Masuk"}
               </Button>
             </form>
 
-            {/* Dummy Mode Info */}
             <Alert className="mt-4 bg-blue-50 border-blue-200">
               <AlertCircle className="h-4 w-4 text-blue-600" />
               <AlertDescription className="text-blue-900 text-xs">
-                <strong>Mode Demo:</strong> Terima semua username & password (untuk testing)
+                <strong>Info:</strong> Silakan masukkan username dan password
+                yang terdaftar di database
               </AlertDescription>
             </Alert>
           </CardContent>

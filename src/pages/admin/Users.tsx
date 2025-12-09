@@ -31,7 +31,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Search, Plus, Edit, Trash2, Users as UsersIcon, GraduationCap } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Edit,
+  Trash2,
+  Users as UsersIcon,
+  GraduationCap,
+} from "lucide-react";
 import { adminAPI, guruAPI, siswaAPI } from "@/lib/api";
 import { mockGuru, mockSiswa } from "@/lib/mockData";
 import { toast } from "react-hot-toast";
@@ -41,7 +48,10 @@ const Users = () => {
   const [activeKelas, setActiveKelas] = useState("X TKJ 1");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState<{ id: number; type: string } | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{
+    id: number;
+    type: string;
+  } | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [importGuruDialogOpen, setImportGuruDialogOpen] = useState(false);
@@ -52,6 +62,7 @@ const Users = () => {
   // Data states
   const [guru, setGuru] = useState<any[]>([]);
   const [siswa, setSiswa] = useState<any[]>([]);
+  const [kelasList, setKelasList] = useState<string[]>([]);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -73,22 +84,37 @@ const Users = () => {
     try {
       setLoading(true);
       console.log("🔄 Fetching guru and siswa data from API...");
-      
+
       const [guruData, siswaData] = await Promise.all([
-        guruAPI.getAll().catch(err => {
+        guruAPI.getAll().catch((err) => {
           console.error("❌ Error fetching guru:", err);
           return null;
         }),
-        siswaAPI.getAll().catch(err => {
+        siswaAPI.getAll().catch((err) => {
           console.error("❌ Error fetching siswa:", err);
           return null;
         }),
       ]);
-      
+
       console.log("✅ API Response:", { guruData, siswaData });
-      
-      setGuru(guruData && Array.isArray(guruData) && guruData.length > 0 ? guruData : mockGuru);
-      setSiswa(siswaData && Array.isArray(siswaData) && siswaData.length > 0 ? siswaData : mockSiswa);
+
+      const guruList =
+        guruData && Array.isArray(guruData) && guruData.length > 0
+          ? guruData
+          : mockGuru;
+      const siswaList =
+        siswaData && Array.isArray(siswaData) && siswaData.length > 0
+          ? siswaData
+          : mockSiswa;
+
+      setGuru(guruList);
+      setSiswa(siswaList);
+
+      // Extract unique kelas from siswa data
+      const uniqueKelas = [
+        ...new Set(siswaList.map((s) => s.kelas).filter(Boolean)),
+      ].sort() as string[];
+      setKelasList(uniqueKelas);
     } catch (error) {
       console.error("❌ Error fetching data:", error);
       toast.error("Gagal memuat data pengguna");
@@ -105,15 +131,15 @@ const Users = () => {
     try {
       setLoading(true);
       const type = itemToDelete.type.toLowerCase();
-      
+
       if (type === "guru") {
         await guruAPI.delete(itemToDelete.id);
-        setGuru(guru.filter(g => g.id !== itemToDelete.id));
+        setGuru(guru.filter((g) => g.id !== itemToDelete.id));
       } else if (type === "siswa") {
         await siswaAPI.delete(itemToDelete.id);
-        setSiswa(siswa.filter(s => s.id !== itemToDelete.id));
+        setSiswa(siswa.filter((s) => s.id !== itemToDelete.id));
       }
-      
+
       toast.success(`${itemToDelete.type} berhasil dihapus!`);
       setDeleteDialogOpen(false);
       setItemToDelete(null);
@@ -134,7 +160,7 @@ const Users = () => {
     try {
       setLoading(true);
       const type = activeTab;
-      
+
       if (type === "guru") {
         if (!formData.nip || !formData.name) {
           toast.error("NIP dan nama harus diisi");
@@ -156,9 +182,22 @@ const Users = () => {
           kelas: formData.kelas,
         });
         setSiswa([...siswa, newSiswa]);
+
+        // Update kelas list if new kelas added
+        if (formData.kelas && !kelasList.includes(formData.kelas)) {
+          setKelasList([...kelasList, formData.kelas].sort());
+        }
       }
-      
-      toast.success(`${activeTab === "admin" ? "Admin" : activeTab === "guru" ? "Guru" : "Siswa"} berhasil ditambahkan!`);
+
+      toast.success(
+        `${
+          activeTab === "admin"
+            ? "Admin"
+            : activeTab === "guru"
+            ? "Guru"
+            : "Siswa"
+        } berhasil ditambahkan!`
+      );
       setAddDialogOpen(false);
       setFormData({
         username: "",
@@ -178,18 +217,26 @@ const Users = () => {
   };
 
   // Import CSV Guru: headers nip,name
-  const handleImportGuruCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportGuruCsv = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       setLoading(true);
       const text = await file.text();
-      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
       if (lines.length < 2) {
         toast.error("File kosong atau format tidak valid");
         return;
       }
-      const header = lines.shift()!.split(",").map(h => h.trim().toLowerCase());
+      const header = lines
+        .shift()!
+        .split(",")
+        .map((h) => h.trim().toLowerCase());
       const idxNip = header.indexOf("nip");
       const idxName = header.indexOf("name");
       if (idxNip === -1 || idxName === -1) {
@@ -197,7 +244,8 @@ const Users = () => {
         return;
       }
 
-      const newEntries: { nip: string; name: string; created_at?: string }[] = [];
+      const newEntries: { nip: string; name: string; created_at?: string }[] =
+        [];
       for (const line of lines) {
         const cols = line.split(",");
         const nip = (cols[idxNip] || "").trim();
@@ -228,18 +276,26 @@ const Users = () => {
   };
 
   // Import CSV Siswa: headers nis,name,kelas
-  const handleImportSiswaCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportSiswaCsv = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       setLoading(true);
       const text = await file.text();
-      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
       if (lines.length < 2) {
         toast.error("File kosong atau format tidak valid");
         return;
       }
-      const header = lines.shift()!.split(",").map(h => h.trim().toLowerCase());
+      const header = lines
+        .shift()!
+        .split(",")
+        .map((h) => h.trim().toLowerCase());
       const idxNis = header.indexOf("nis");
       const idxName = header.indexOf("name");
       const idxKelas = header.indexOf("kelas");
@@ -248,7 +304,12 @@ const Users = () => {
         return;
       }
 
-      const newEntries: { nis: string; name: string; kelas: string; created_at?: string }[] = [];
+      const newEntries: {
+        nis: string;
+        name: string;
+        kelas: string;
+        created_at?: string;
+      }[] = [];
       for (const line of lines) {
         const cols = line.split(",");
         const nis = (cols[idxNis] || "").trim();
@@ -284,7 +345,7 @@ const Users = () => {
     try {
       setLoading(true);
       const type = editingItem.type;
-      
+
       if (type === "guru") {
         if (!formData.nip || !formData.name) {
           toast.error("NIP dan nama harus diisi");
@@ -294,7 +355,13 @@ const Users = () => {
           nip: formData.nip,
           name: formData.name,
         });
-        setGuru(guru.map(g => g.id === editingItem.id ? { ...g, nip: formData.nip, name: formData.name } : g));
+        setGuru(
+          guru.map((g) =>
+            g.id === editingItem.id
+              ? { ...g, nip: formData.nip, name: formData.name }
+              : g
+          )
+        );
       } else if (type === "siswa") {
         if (!formData.nis || !formData.name || !formData.kelas) {
           toast.error("NIS, nama, dan kelas harus diisi");
@@ -305,9 +372,20 @@ const Users = () => {
           name: formData.name,
           kelas: formData.kelas,
         });
-        setSiswa(siswa.map(s => s.id === editingItem.id ? { ...s, nis: formData.nis, name: formData.name, kelas: formData.kelas } : s));
+        setSiswa(
+          siswa.map((s) =>
+            s.id === editingItem.id
+              ? {
+                  ...s,
+                  nis: formData.nis,
+                  name: formData.name,
+                  kelas: formData.kelas,
+                }
+              : s
+          )
+        );
       }
-      
+
       toast.success(`Data berhasil diupdate!`);
       setEditDialogOpen(false);
       setEditingItem(null);
@@ -338,15 +416,17 @@ const Users = () => {
     setEditDialogOpen(true);
   };
 
-  const filteredGuru = guru.filter((g) =>
-    g.nip.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    g.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredGuru = guru.filter(
+    (g) =>
+      g.nip.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      g.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredSiswa = siswa.filter((s) =>
-    s.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.kelas.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredSiswa = siswa.filter(
+    (s) =>
+      s.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.kelas.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (loading && guru.length === 0 && siswa.length === 0) {
@@ -415,12 +495,18 @@ const Users = () => {
                   />
                 </div>
                 {activeTab === "guru" && (
-                  <Button variant="outline" onClick={() => setImportGuruDialogOpen(true)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setImportGuruDialogOpen(true)}
+                  >
                     Import CSV Guru
                   </Button>
                 )}
                 {activeTab === "siswa" && (
-                  <Button variant="outline" onClick={() => setImportSiswaDialogOpen(true)}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setImportSiswaDialogOpen(true)}
+                  >
                     Import CSV Siswa
                   </Button>
                 )}
@@ -445,7 +531,12 @@ const Users = () => {
                             <Input
                               id="nip"
                               value={formData.nip}
-                              onChange={(e) => setFormData({ ...formData, nip: e.target.value })}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  nip: e.target.value,
+                                })
+                              }
                               placeholder="NIP"
                             />
                           </div>
@@ -454,7 +545,12 @@ const Users = () => {
                             <Input
                               id="name"
                               value={formData.name}
-                              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  name: e.target.value,
+                                })
+                              }
                               placeholder="Nama Lengkap"
                             />
                           </div>
@@ -467,7 +563,12 @@ const Users = () => {
                             <Input
                               id="nis"
                               value={formData.nis}
-                              onChange={(e) => setFormData({ ...formData, nis: e.target.value })}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  nis: e.target.value,
+                                })
+                              }
                               placeholder="NIS"
                             />
                           </div>
@@ -476,24 +577,44 @@ const Users = () => {
                             <Input
                               id="name"
                               value={formData.name}
-                              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  name: e.target.value,
+                                })
+                              }
                               placeholder="Nama Lengkap"
                             />
                           </div>
                           <div>
                             <Label htmlFor="kelas">Kelas *</Label>
-                            <Input
+                            <select
                               id="kelas"
                               value={formData.kelas}
-                              onChange={(e) => setFormData({ ...formData, kelas: e.target.value })}
-                              placeholder="Contoh: X TKJ 1"
-                            />
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  kelas: e.target.value,
+                                })
+                              }
+                              className="w-full px-3 py-2 border rounded-md text-sm"
+                            >
+                              <option value="">Pilih Kelas</option>
+                              {kelasList.map((kelas) => (
+                                <option key={kelas} value={kelas}>
+                                  {kelas}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         </>
                       )}
                     </div>
                     <div className="flex justify-end gap-2">
-                      <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
+                      <Button
+                        variant="outline"
+                        onClick={() => setAddDialogOpen(false)}
+                      >
                         Batal
                       </Button>
                       <Button onClick={handleAdd}>Simpan</Button>
@@ -516,7 +637,6 @@ const Users = () => {
                 </TabsTrigger>
               </TabsList>
 
-
               {/* Guru Tab */}
               <TabsContent value="guru" className="space-y-4">
                 <div className="overflow-x-auto">
@@ -538,7 +658,9 @@ const Users = () => {
                               {guru.nip}
                             </code>
                           </TableCell>
-                          <TableCell className="font-medium py-2">{guru.name}</TableCell>
+                          <TableCell className="font-medium py-2">
+                            {guru.name}
+                          </TableCell>
                           <TableCell className="text-right py-2">
                             <div className="flex gap-1 justify-end">
                               <Button
@@ -553,7 +675,10 @@ const Users = () => {
                                 size="icon"
                                 className="text-destructive hover:text-destructive"
                                 onClick={() => {
-                                  setItemToDelete({ id: guru.id, type: "Guru" });
+                                  setItemToDelete({
+                                    id: guru.id,
+                                    type: "Guru",
+                                  });
                                   setDeleteDialogOpen(true);
                                 }}
                               >
@@ -580,10 +705,23 @@ const Users = () => {
                     <TabsTrigger value="XI TKJ 3">XI TKJ 3</TabsTrigger>
                   </TabsList>
 
-                  {["X TKJ 1", "X TKJ 2", "X TKJ 3", "XI TKJ 1", "XI TKJ 2", "XI TKJ 3"].map((kelas) => {
-                    const siswaByKelas = filteredSiswa.filter(s => s.kelas === kelas);
+                  {[
+                    "X TKJ 1",
+                    "X TKJ 2",
+                    "X TKJ 3",
+                    "XI TKJ 1",
+                    "XI TKJ 2",
+                    "XI TKJ 3",
+                  ].map((kelas) => {
+                    const siswaByKelas = filteredSiswa.filter(
+                      (s) => s.kelas === kelas
+                    );
                     return (
-                      <TabsContent key={kelas} value={kelas} className="space-y-4">
+                      <TabsContent
+                        key={kelas}
+                        value={kelas}
+                        className="space-y-4"
+                      >
                         <div className="overflow-x-auto">
                           <Table>
                             <TableHeader>
@@ -591,26 +729,34 @@ const Users = () => {
                                 <TableHead>No</TableHead>
                                 <TableHead>NIS</TableHead>
                                 <TableHead>Nama Lengkap</TableHead>
-                                <TableHead className="text-right">Aksi</TableHead>
+                                <TableHead className="text-right">
+                                  Aksi
+                                </TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {siswaByKelas.length > 0 ? (
                                 siswaByKelas.map((siswa, index) => (
                                   <TableRow key={siswa.id} className="h-auto">
-                                    <TableCell className="py-2">{index + 1}</TableCell>
+                                    <TableCell className="py-2">
+                                      {index + 1}
+                                    </TableCell>
                                     <TableCell className="py-2">
                                       <code className="text-xs bg-muted px-2 py-1 rounded">
                                         {siswa.nis}
                                       </code>
                                     </TableCell>
-                                    <TableCell className="font-medium py-2">{siswa.name}</TableCell>
+                                    <TableCell className="font-medium py-2">
+                                      {siswa.name}
+                                    </TableCell>
                                     <TableCell className="text-right py-2">
                                       <div className="flex gap-1 justify-end">
                                         <Button
                                           variant="ghost"
                                           size="icon"
-                                          onClick={() => openEditDialog(siswa, "siswa")}
+                                          onClick={() =>
+                                            openEditDialog(siswa, "siswa")
+                                          }
                                         >
                                           <Edit className="h-4 w-4" />
                                         </Button>
@@ -619,7 +765,10 @@ const Users = () => {
                                           size="icon"
                                           className="text-destructive hover:text-destructive"
                                           onClick={() => {
-                                            setItemToDelete({ id: siswa.id, type: "Siswa" });
+                                            setItemToDelete({
+                                              id: siswa.id,
+                                              type: "Siswa",
+                                            });
                                             setDeleteDialogOpen(true);
                                           }}
                                         >
@@ -631,7 +780,10 @@ const Users = () => {
                                 ))
                               ) : (
                                 <TableRow>
-                                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                                  <TableCell
+                                    colSpan={4}
+                                    className="text-center text-muted-foreground py-8"
+                                  >
                                     Belum ada siswa di kelas {kelas}
                                   </TableCell>
                                 </TableRow>
@@ -652,7 +804,14 @@ const Users = () => {
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit {editingItem?.type === "admin" ? "Admin" : editingItem?.type === "guru" ? "Guru" : "Siswa"}</DialogTitle>
+              <DialogTitle>
+                Edit{" "}
+                {editingItem?.type === "admin"
+                  ? "Admin"
+                  : editingItem?.type === "guru"
+                  ? "Guru"
+                  : "Siswa"}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               {editingItem?.type === "admin" && (
@@ -662,7 +821,9 @@ const Users = () => {
                     <Input
                       id="edit-username"
                       value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, username: e.target.value })
+                      }
                     />
                   </div>
                   <div>
@@ -670,7 +831,12 @@ const Users = () => {
                     <Input
                       id="edit-nama"
                       value={formData.nama_lengkap}
-                      onChange={(e) => setFormData({ ...formData, nama_lengkap: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          nama_lengkap: e.target.value,
+                        })
+                      }
                     />
                   </div>
                 </>
@@ -682,7 +848,9 @@ const Users = () => {
                     <Input
                       id="edit-nip"
                       value={formData.nip}
-                      onChange={(e) => setFormData({ ...formData, nip: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, nip: e.target.value })
+                      }
                     />
                   </div>
                   <div>
@@ -690,7 +858,9 @@ const Users = () => {
                     <Input
                       id="edit-name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
                     />
                   </div>
                 </>
@@ -702,7 +872,9 @@ const Users = () => {
                     <Input
                       id="edit-nis"
                       value={formData.nis}
-                      onChange={(e) => setFormData({ ...formData, nis: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, nis: e.target.value })
+                      }
                     />
                   </div>
                   <div>
@@ -710,22 +882,37 @@ const Users = () => {
                     <Input
                       id="edit-name"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
                     />
                   </div>
                   <div>
                     <Label htmlFor="edit-kelas">Kelas *</Label>
-                    <Input
+                    <select
                       id="edit-kelas"
                       value={formData.kelas}
-                      onChange={(e) => setFormData({ ...formData, kelas: e.target.value })}
-                    />
+                      onChange={(e) =>
+                        setFormData({ ...formData, kelas: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    >
+                      <option value="">Pilih Kelas</option>
+                      {kelasList.map((kelas) => (
+                        <option key={kelas} value={kelas}>
+                          {kelas}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </>
               )}
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setEditDialogOpen(false)}
+              >
                 Batal
               </Button>
               <Button onClick={handleEdit}>Update</Button>
@@ -734,7 +921,10 @@ const Users = () => {
         </Dialog>
 
         {/* Import Guru Dialog */}
-        <Dialog open={importGuruDialogOpen} onOpenChange={setImportGuruDialogOpen}>
+        <Dialog
+          open={importGuruDialogOpen}
+          onOpenChange={setImportGuruDialogOpen}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Import CSV Guru</DialogTitle>
@@ -745,21 +935,21 @@ const Users = () => {
                   Format CSV: <strong>nip, name</strong>
                 </p>
                 <p className="text-xs text-muted-foreground mb-4">
-                  ✓ Kode tidak perlu, hanya nip & name<br/>
-                  ✓ Format: CSV saja (tidak support XLSX)
+                  ✓ Kode tidak perlu, hanya nip & name
+                  <br />✓ Format: CSV saja (tidak support XLSX)
                 </p>
                 <Button
                   size="sm"
                   variant="secondary"
                   className="w-full mb-4"
                   onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = '/template-guru.csv';
-                    link.download = 'template-guru.csv';
+                    const link = document.createElement("a");
+                    link.href = "/template-guru.csv";
+                    link.download = "template-guru.csv";
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    toast.success('Template CSV berhasil didownload');
+                    toast.success("Template CSV berhasil didownload");
                   }}
                 >
                   📥 Download Template CSV
@@ -773,13 +963,20 @@ const Users = () => {
                     id="import-guru-file"
                   />
                   <label htmlFor="import-guru-file" className="cursor-pointer">
-                    <div className="text-sm font-medium">Klik untuk memilih file</div>
-                    <div className="text-xs text-muted-foreground mt-1">CSV</div>
+                    <div className="text-sm font-medium">
+                      Klik untuk memilih file
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      CSV
+                    </div>
                   </label>
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setImportGuruDialogOpen(false)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setImportGuruDialogOpen(false)}
+                >
                   Batal
                 </Button>
               </div>
@@ -788,7 +985,10 @@ const Users = () => {
         </Dialog>
 
         {/* Import Siswa Dialog */}
-        <Dialog open={importSiswaDialogOpen} onOpenChange={setImportSiswaDialogOpen}>
+        <Dialog
+          open={importSiswaDialogOpen}
+          onOpenChange={setImportSiswaDialogOpen}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Import CSV Siswa</DialogTitle>
@@ -799,21 +999,21 @@ const Users = () => {
                   Format CSV: <strong>nis, name, kelas</strong>
                 </p>
                 <p className="text-xs text-muted-foreground mb-4">
-                  ✓ Kode tidak perlu, hanya nis & name & kelas<br/>
-                  ✓ Format: CSV saja (tidak support XLSX)
+                  ✓ Kode tidak perlu, hanya nis & name & kelas
+                  <br />✓ Format: CSV saja (tidak support XLSX)
                 </p>
                 <Button
                   size="sm"
                   variant="secondary"
                   className="w-full mb-4"
                   onClick={() => {
-                    const link = document.createElement('a');
-                    link.href = '/template-siswa.csv';
-                    link.download = 'template-siswa.csv';
+                    const link = document.createElement("a");
+                    link.href = "/template-siswa.csv";
+                    link.download = "template-siswa.csv";
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
-                    toast.success('Template CSV berhasil didownload');
+                    toast.success("Template CSV berhasil didownload");
                   }}
                 >
                   📥 Download Template CSV
@@ -827,13 +1027,20 @@ const Users = () => {
                     id="import-siswa-file"
                   />
                   <label htmlFor="import-siswa-file" className="cursor-pointer">
-                    <div className="text-sm font-medium">Klik untuk memilih file</div>
-                    <div className="text-xs text-muted-foreground mt-1">CSV</div>
+                    <div className="text-sm font-medium">
+                      Klik untuk memilih file
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      CSV
+                    </div>
                   </label>
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setImportSiswaDialogOpen(false)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setImportSiswaDialogOpen(false)}
+                >
                   Batal
                 </Button>
               </div>

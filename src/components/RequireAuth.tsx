@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getAdminToken } from "@/lib/auth";
+import { adminAPI } from "@/lib/api";
 
 const RequireAuth = ({ children }: { children: JSX.Element }) => {
   const navigate = useNavigate();
@@ -11,12 +12,17 @@ const RequireAuth = ({ children }: { children: JSX.Element }) => {
     const check = async () => {
       try {
         const token = getAdminToken();
-        // DUMMY MODE: Just check if token exists, no API call
         if (!token) throw new Error("no-token");
-        
-        // Token exists, allow access
+
+        // Validate token by calling getProfile endpoint
+        const profile = await adminAPI.getProfile(token);
+
+        if (!profile) throw new Error("invalid-token");
+
+        // Token is valid, allow access
         setChecking(false);
-      } catch {
+      } catch (error) {
+        // Token is invalid or not found
         navigate("/admin-tkj/login", {
           replace: true,
           state: { from: location.pathname },

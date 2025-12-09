@@ -177,6 +177,7 @@ const ReturnFlow = () => {
     try {
       // Get all barang and find the one with matching kode_barang
       const allBarang = await barangAPI.getAll();
+
       const item = allBarang.find(
         (b) => b.kode_barang.toLowerCase() === kode.toLowerCase()
       );
@@ -199,11 +200,78 @@ const ReturnFlow = () => {
         return;
       }
 
-      setFoundItem(item);
+      // Find the peminjaman record that has this barang with status "Dipinjam"
+      const allPeminjaman = await peminjamanAPI.getAll();
 
-      // Find the peminjaman record for this barang
-      // For now, we'll just proceed to verification
-      // In a real scenario, you'd need to find which peminjaman record this belongs to
+      let foundDetail: any = null;
+      let foundPeminjamanRecord: any = null;
+
+      for (const pmj of allPeminjaman) {
+        // Filter out null/empty details
+        const detailArray = (pmj.detail_peminjaman || []).filter(
+          (d: any) => d && d.id_barang
+        );
+
+        console.log("🔍 Checking peminjaman:", {
+          kode: pmj.kode_peminjaman,
+          id_peminjaman: pmj.id_peminjaman,
+          detailCount: detailArray.length,
+          details: detailArray.map((d: any) => ({
+            id_barang: d.id_barang,
+            status: d.status,
+          })),
+        });
+
+        const detail = detailArray.find((d: any) => {
+          return d.id_barang === item.id_barang && d.status === "Dipinjam";
+        });
+
+        if (detail) {
+          foundDetail = detail;
+          foundPeminjamanRecord = pmj;
+          break;
+        }
+      }
+
+      if (!foundDetail || !foundPeminjamanRecord) {
+        // Show helpful error message with available items
+        const availableItems = [];
+        for (const pmj of allPeminjaman) {
+          const detailArray = (pmj.detail_peminjaman || []).filter(
+            (d: any) => d && d.id_barang && d.status === "Dipinjam"
+          );
+          for (const detail of detailArray) {
+            availableItems.push({
+              nama_barang: detail.nama_barang,
+              kode_barang: detail.kode_barang,
+              id_barang: detail.id_barang,
+              kode_peminjaman: pmj.kode_peminjaman,
+            });
+          }
+        }
+
+        const itemList = availableItems
+          .map(
+            (avail) =>
+              `${avail.kode_barang} (${avail.nama_barang}) - Transaksi: ${avail.kode_peminjaman}`
+          )
+          .join("\n");
+
+        toast.error(
+          `❌ Barang ini tidak sedang dipinjam.\n\nBarang yang tersedia untuk return:\n${itemList}`
+        );
+        setScannedBarcode("");
+        return;
+      }
+
+      // Combine barang info with detail_peminjaman info
+      const itemWithDetail = {
+        ...item,
+        id_detail_peminjaman: foundDetail.id_detail_peminjaman,
+      };
+
+      setFoundItem(itemWithDetail);
+      setFoundPeminjaman(foundPeminjamanRecord);
 
       setCurrentStep("verify");
       toast.success(`✓ Barang ditemukan: ${item.nama_barang}`);
@@ -232,6 +300,33 @@ const ReturnFlow = () => {
 
     setIsLoading(true);
     try {
+      console.log("🔍 DEBUG - handlePhotoVerification:", {
+        foundPeminjaman: foundPeminjaman?.kode_peminjaman,
+        foundItem: {
+          id: foundItem?.id,
+          id_detail_peminjaman: foundItem?.id_detail_peminjaman,
+          nama_barang: foundItem?.nama_barang,
+        },
+        hasImageData: !!imageData,
+      });
+
+      // Update detail_peminjaman and peminjaman status via backend
+      if (foundPeminjaman && foundItem && foundItem.id_detail_peminjaman) {
+        console.log("📤 Calling peminjamanAPI.return()...");
+        await peminjamanAPI.return(
+          foundPeminjaman.kode_peminjaman,
+          foundItem.id_detail_peminjaman,
+          imageData
+        );
+        console.log("✅ peminjamanAPI.return() success!");
+      } else {
+        console.warn("⚠️ Missing required data for return:", {
+          hasPeminjaman: !!foundPeminjaman,
+          hasItem: !!foundItem,
+          hasDetailId: !!foundItem?.id_detail_peminjaman,
+        });
+      }
+
       // Update barang status back to "Tersedia"
       await barangAPI.update(foundItem!.id, {
         status: "Tersedia",

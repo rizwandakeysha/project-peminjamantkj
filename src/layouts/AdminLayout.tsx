@@ -1,8 +1,9 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Package, ClipboardList, Home, LogOut, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { clearAdminToken } from "@/lib/auth";
+import { clearAdminToken, parseAdminToken } from "@/lib/auth";
+import { toast } from "react-hot-toast";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -11,9 +12,23 @@ interface AdminLayoutProps {
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [adminName, setAdminName] = useState<string>("Admin");
+
+  useEffect(() => {
+    const token = parseAdminToken();
+    if (token && token.nama_lengkap) {
+      setAdminName(token.nama_lengkap);
+    }
+  }, []);
 
   const isActive = (path: string) => {
     return location.pathname === path;
+  };
+
+  const handleLogout = () => {
+    clearAdminToken();
+    toast.success("Logout berhasil");
+    navigate("/admin-tkj/login", { replace: true });
   };
 
   return (
@@ -36,6 +51,10 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             </div>
 
             <div className="flex items-center gap-3">
+              <div className="text-sm text-muted-foreground">
+                Selamat datang,{" "}
+                <span className="font-medium text-foreground">{adminName}</span>
+              </div>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/">
                   <Home className="h-4 w-4 mr-2" />
@@ -46,10 +65,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={() => {
-                  clearAdminToken();
-                  navigate("/admin-tkj/login", { replace: true });
-                }}
+                onClick={handleLogout}
               >
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
