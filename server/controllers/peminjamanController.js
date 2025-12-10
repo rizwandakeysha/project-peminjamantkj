@@ -180,8 +180,8 @@ exports.createPeminjaman = async (req, res) => {
     
     const peminjamanResult = await client.query(
       `INSERT INTO peminjaman 
-       (kode_peminjaman, nama_peminjam, kontak, keperluan, guru_pendamping, foto_credential, signature, status_transaksi) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id_peminjaman`,
+       (kode_peminjaman, nama_peminjam, kontak, keperluan, guru_pendamping, foto_credential, signature, status_transaksi, tanggal_pinjam) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW()) RETURNING id_peminjaman, tanggal_pinjam`,
       [kode_peminjaman, nama_peminjam.trim(), kontakValue, keperluan.trim(), guruPendampingValue, foto_credential || null, signature || null, 'Dipinjam']
     );
 

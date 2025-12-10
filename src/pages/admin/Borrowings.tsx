@@ -36,6 +36,7 @@ import {
   mockJenisBarang,
   mockBorrowingsExtended,
 } from "@/lib/mockData";
+import { formatDateTimeLocal, formatDateLocal } from "@/lib/formatters";
 import { peminjamanAPI, barangAPI } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import {
@@ -136,44 +137,31 @@ const Borrowings = () => {
       setLoading(true);
       const data = await peminjamanAPI.getAll();
 
-      // Transform peminjaman with detail_peminjaman into flattened array for table display
-      let flattenedBorrowings: any[] = [];
+      // Keep peminjaman headers only (one row per transaction)
+      let borrowingsData: any[] = [];
 
       if (data && Array.isArray(data) && data.length > 0) {
-        // Transform structure: 1 peminjaman + multiple detail_peminjaman -> multiple rows in table
+        // Transform structure: keep only peminjaman header, detail_peminjaman stored separately
         data.forEach((pmj: any) => {
-          if (pmj.detail_peminjaman && Array.isArray(pmj.detail_peminjaman)) {
-            pmj.detail_peminjaman.forEach((detail: any) => {
-              flattenedBorrowings.push({
-                id: pmj.id_peminjaman,
-                id_detail_peminjaman: detail.id_detail_peminjaman,
-                kode_peminjaman: pmj.kode_peminjaman,
-                id_barang: detail.id_barang,
-                nama_peminjam: pmj.nama_peminjam,
-                kontak: pmj.kontak,
-                keperluan: pmj.keperluan,
-                guru_pendamping: pmj.guru_pendamping,
-                foto_credential: pmj.foto_credential,
-                tanggal_pinjam: pmj.tanggal_pinjam,
-                status_transaksi: pmj.status_transaksi,
-                // Detail peminjaman fields (status di level barang, bukan transaksi)
-                nama_barang: detail.nama_barang,
-                kode_barang: detail.kode_barang,
-                foto_barang: detail.foto_barang,
-                status: detail.status, // Status detail (Dipinjam, Dikembalikan, etc)
-                tanggal_kembali: detail.tanggal_kembali,
-                foto_bukti_kembali: detail.foto_bukti_kembali,
-                created_at: pmj.created_at,
-                // Jenis Barang info from detail
-                id_jenis_barang: detail.id_jenis_barang,
-                nama_jenis_barang: detail.nama_jenis_barang,
-              });
-            });
-          }
+          borrowingsData.push({
+            id: pmj.id_peminjaman,
+            kode_peminjaman: pmj.kode_peminjaman,
+            nama_peminjam: pmj.nama_peminjam,
+            kontak: pmj.kontak,
+            keperluan: pmj.keperluan,
+            guru_pendamping: pmj.guru_pendamping,
+            foto_credential: pmj.foto_credential,
+            tanggal_pinjam: pmj.tanggal_pinjam,
+            tanggal_kembali: pmj.tanggal_kembali || null,
+            status: pmj.status_transaksi, // Use transaction status
+            created_at: pmj.created_at,
+            // Keep detail_peminjaman for detail dialog
+            detail_peminjaman: pmj.detail_peminjaman || [],
+          });
         });
-        setBorrowings(flattenedBorrowings);
-        // Store raw data for stats calculation (peminjaman header only)
-        window.__peminjamanData = data;
+        setBorrowings(borrowingsData);
+        // Store raw data for detail dialog and stats
+        (window as any).__peminjamanData = data;
       } else {
         // Fallback to mock
         setBorrowings(mockBorrowingsExtended as any);
@@ -200,12 +188,8 @@ const Borrowings = () => {
       borrowing.keperluan || "",
       borrowing.guru_pendamping || "",
       borrowing.status || "",
-      borrowing.tanggal_pinjam
-        ? new Date(borrowing.tanggal_pinjam).toLocaleString("id-ID")
-        : "",
-      borrowing.tanggal_kembali
-        ? new Date(borrowing.tanggal_kembali).toLocaleString("id-ID")
-        : "",
+      formatDateTimeLocal(borrowing.tanggal_pinjam || ""),
+      formatDateTimeLocal(borrowing.tanggal_kembali || ""),
     ].map((s) => String(s).toLowerCase());
 
     const matchesSearch = q === "" || fields.some((f) => f.includes(q));
@@ -356,9 +340,9 @@ const Borrowings = () => {
       "Tanggal Pinjam",
       "Tanggal Kembali",
       "Nama Peminjam",
-      "Kontak",
-      "Barang",
-      "Jumlah",
+      "No. Handphone",
+      "Kode Barang",
+      "Nama Barang",
       "Keperluan",
       "Guru Pendamping",
       "Status",
@@ -369,49 +353,46 @@ const Borrowings = () => {
 
     let globalIndex = 0;
     for (const borrowing of sortedBorrowings) {
-      const details = mockDetailPeminjaman.filter(
-        (d) => d.peminjaman_id === borrowing.id
-      );
+      const details = borrowing.detail_peminjaman || [];
+      const datePinjam = formatDateTimeLocal(borrowing.tanggal_pinjam);
+      const dateKembali = borrowing.tanggal_kembali
+        ? formatDateTimeLocal(borrowing.tanggal_kembali)
+        : "-";
+
       if (details.length === 0) {
         globalIndex++;
         rows.push(
           [
             globalIndex,
             borrowing.kode_peminjaman,
-            new Date(borrowing.tanggal_pinjam).toLocaleDateString("id-ID"),
-            borrowing.tanggal_kembali
-              ? new Date(borrowing.tanggal_kembali).toLocaleDateString("id-ID")
-              : "-",
+            `"${datePinjam}"`,
+            `"${dateKembali}"`,
             `"${borrowing.nama_peminjam}"`,
             borrowing.kontak || "-",
-            `"${borrowing.nama_barang}"`,
-            borrowing.jumlah,
-            `"${borrowing.keperluan}"`,
-            `"${borrowing.guru_pendamping}"`,
+            "-",
+            "-",
+            `"${borrowing.keperluan || ""}"`,
+            `"${borrowing.guru_pendamping || ""}"`,
             borrowing.status,
           ].join(",")
         );
       } else {
         // multiple rows: first row contains borrower info, subsequent rows have empty borrower columns
         for (let i = 0; i < details.length; i++) {
-          const d = details[i];
+          const detail = details[i];
           globalIndex++;
           rows.push(
             [
               globalIndex,
               borrowing.kode_peminjaman,
-              new Date(borrowing.tanggal_pinjam).toLocaleDateString("id-ID"),
-              borrowing.tanggal_kembali
-                ? new Date(borrowing.tanggal_kembali).toLocaleDateString(
-                    "id-ID"
-                  )
-                : "-",
+              `"${datePinjam}"`,
+              `"${dateKembali}"`,
               i === 0 ? `"${borrowing.nama_peminjam}"` : "",
               i === 0 ? borrowing.kontak || "-" : "",
-              `"${d.nama_barang}"`,
-              d.jumlah,
-              i === 0 ? `"${borrowing.keperluan}"` : "",
-              i === 0 ? `"${borrowing.guru_pendamping}"` : "",
+              `"${detail.kode_barang || ""}"`,
+              `"${detail.nama_barang || ""}"`,
+              i === 0 ? `"${borrowing.keperluan || ""}"` : "",
+              i === 0 ? `"${borrowing.guru_pendamping || ""}"` : "",
               i === 0 ? borrowing.status : "",
             ].join(",")
           );
@@ -445,8 +426,9 @@ const Borrowings = () => {
       { header: "No", dataKey: "no" },
       { header: "Kode Peminjaman", dataKey: "kode" },
       { header: "Nama Peminjam", dataKey: "nama" },
-      { header: "Kontak", dataKey: "kontak" },
-      { header: "Barang", dataKey: "barang" },
+      { header: "No. Handphone", dataKey: "kontak" },
+      { header: "Kode Barang", dataKey: "kode_barang" },
+      { header: "Nama Barang", dataKey: "barang" },
       { header: "Keperluan", dataKey: "keperluan" },
       { header: "Guru Pendamping", dataKey: "guru" },
       { header: "Tanggal Pinjam", dataKey: "pinjam" },
@@ -457,59 +439,62 @@ const Borrowings = () => {
     const bodyRows: any[] = [];
     let rowCounter = 0;
 
-    for (const b of sortedBorrowings) {
-      const details = mockDetailPeminjaman.filter(
-        (d) => d.peminjaman_id === b.id
-      );
-      const datePinjam = new Date(b.tanggal_pinjam).toLocaleDateString("id-ID");
-      const dateKembali = b.tanggal_kembali
-        ? new Date(b.tanggal_kembali).toLocaleDateString("id-ID")
+    for (const borrowing of sortedBorrowings) {
+      const details = borrowing.detail_peminjaman || [];
+      const datePinjam = formatDateTimeLocal(borrowing.tanggal_pinjam);
+      const dateKembali = borrowing.tanggal_kembali
+        ? formatDateTimeLocal(borrowing.tanggal_kembali)
         : "-";
 
       if (details.length === 0) {
+        // Single row if no details
         rowCounter++;
         bodyRows.push({
           no: rowCounter,
-          kode: b.kode_peminjaman,
-          nama: b.nama_peminjam,
-          kontak: b.kontak || "-",
-          barang: b.nama_barang,
-          keperluan: b.keperluan || "-",
-          guru: b.guru_pendamping || "-",
+          kode: borrowing.kode_peminjaman,
+          nama: borrowing.nama_peminjam,
+          kontak: borrowing.kontak || "-",
+          kode_barang: "-",
+          barang: "-",
+          keperluan: borrowing.keperluan || "-",
+          guru: borrowing.guru_pendamping || "-",
           pinjam: datePinjam,
           kembali: dateKembali,
-          status: b.status,
+          status: borrowing.status,
         });
       } else {
+        // Multiple rows: one per detail item, with merged columns for borrowing info
         for (let i = 0; i < details.length; i++) {
-          const d = details[i];
+          const detail = details[i];
           rowCounter++;
           if (i === 0) {
-            // first row: include borrower fields and a hidden grouping marker
+            // First row: include borrower fields
             bodyRows.push({
-              __groupId: b.id,
+              __groupId: borrowing.id,
               __groupSize: details.length,
               no: rowCounter,
-              kode: b.kode_peminjaman,
-              nama: b.nama_peminjam,
-              kontak: b.kontak || "-",
-              barang: d.nama_barang,
-              keperluan: b.keperluan || "-",
-              guru: b.guru_pendamping || "-",
+              kode: borrowing.kode_peminjaman,
+              nama: borrowing.nama_peminjam,
+              kontak: borrowing.kontak || "-",
+              kode_barang: detail.kode_barang || "-",
+              barang: detail.nama_barang || "-",
+              keperluan: borrowing.keperluan || "-",
+              guru: borrowing.guru_pendamping || "-",
               pinjam: datePinjam,
               kembali: dateKembali,
-              status: b.status,
+              status: borrowing.status,
             });
           } else {
-            // subsequent rows: only barang is filled; other fields empty
+            // Subsequent rows: only barang fields filled; others empty for merging
             bodyRows.push({
-              __groupId: b.id,
+              __groupId: borrowing.id,
               __groupSize: details.length,
               no: "",
               kode: "",
               nama: "",
               kontak: "",
-              barang: d.nama_barang,
+              kode_barang: detail.kode_barang || "-",
+              barang: detail.nama_barang || "-",
               keperluan: "",
               guru: "",
               pinjam: "",
@@ -521,7 +506,6 @@ const Borrowings = () => {
       }
     }
 
-    // helpful debugging in browser console when export is triggered
     // eslint-disable-next-line no-console
     console.log("PDF export bodyRows:", bodyRows);
 
@@ -533,11 +517,11 @@ const Borrowings = () => {
       headStyles: { fillColor: [78, 52, 46] },
       theme: "grid",
       didParseCell: function (data) {
-        // only apply rowSpan for body cells that belong to a grouped borrowing
+        // Apply rowSpan for merged cells on grouped rows
         if (data.section === "body") {
           const raw = data.row.raw as any;
           if (raw && raw.__groupId && raw.__groupSize && raw.__groupSize > 1) {
-            // columns to merge vertically on grouped rows (all borrower-related cols)
+            // Columns to merge vertically (all borrower-related columns)
             const mergeKeys = [
               "no",
               "kode",
@@ -550,7 +534,7 @@ const Borrowings = () => {
               "status",
             ];
             const key = data.column.dataKey as string;
-            // first row of group has actual content for these keys; detect via raw[key] !== ''
+            // First row has content; detect via raw[key] !== ''
             if (mergeKeys.includes(key) && raw[key] !== "") {
               data.cell.rowSpan = raw.__groupSize;
             }
@@ -895,18 +879,7 @@ const Borrowings = () => {
                         <ChevronsUpDown className="ml-1 h-3 w-3" />
                       </Button>
                     </TableHead>
-                    <TableHead className="w-[5%]">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="-ml-3 h-8"
-                        onClick={() => handleSort("jenis_barang")}
-                      >
-                        Jenis
-                        <ChevronsUpDown className="ml-1 h-3 w-3" />
-                      </Button>
-                    </TableHead>
-                    <TableHead className="w-[7%]">Barang</TableHead>
+                    <TableHead className="w-[8%]">Jumlah Barang</TableHead>
                     <TableHead className="w-[8%]">
                       <Button
                         variant="ghost"
@@ -934,6 +907,9 @@ const Borrowings = () => {
                 </TableHeader>
                 <TableBody>
                   {sortedBorrowings.map((borrowing: any, index) => {
+                    // Hitung jumlah barang dari detail_peminjaman
+                    const itemCount = borrowing.detail_peminjaman?.length || 0;
+
                     return (
                       <TableRow key={borrowing.id}>
                         <TableCell className="text-center text-sm p-2">
@@ -989,23 +965,9 @@ const Borrowings = () => {
                         </TableCell>
 
                         <TableCell className="p-2">
-                          {borrowing.nama_jenis_barang ? (
-                            <div>
-                              <div className="font-medium text-xs break-words">
-                                {borrowing.nama_jenis_barang}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              -
-                            </span>
-                          )}
-                        </TableCell>
-
-                        <TableCell className="p-2">
-                          <div className="text-xs break-words">
-                            {borrowing.nama_barang || "-"}
-                          </div>
+                          <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                            {itemCount || 1} item
+                          </span>
                         </TableCell>
 
                         <TableCell className="text-xs p-2 break-words">
@@ -1096,12 +1058,13 @@ const Borrowings = () => {
 
         {/* Detail Dialog */}
         <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Detail Peminjaman</DialogTitle>
             </DialogHeader>
             {selectedBorrowing && (
               <div className="space-y-4 overflow-y-auto flex-1 pr-2">
+                {/* Header Info */}
                 <div className="bg-accent/50 p-4 rounded-lg">
                   <div className="text-center mb-2">
                     <code className="text-lg font-mono font-bold">
@@ -1126,130 +1089,124 @@ const Borrowings = () => {
                   </div>
                 </div>
 
-                {/* Detail list of items for this borrowing (detail_peminjaman) */}
+                {/* Tabel Barang */}
                 <div>
-                  <h4 className="font-semibold mb-3">
-                    Daftar Barang dalam Transaksi
-                  </h4>
-                  <div className="space-y-2">
-                    {mockDetailPeminjaman
-                      .filter((d) => d.peminjaman_id === selectedBorrowing.id)
-                      .map((d) => {
-                        const item = mockBarang.find(
-                          (b) => b.id_barang === d.id_barang
-                        );
-                        const jenis = item
-                          ? mockJenisBarang.find(
-                              (j) => j.id_jenis_barang === item.id_jenis_barang
-                            )
-                          : undefined;
-                        return (
-                          <div
-                            key={`${d.peminjaman_id}-${d.id_barang}`}
-                            className="flex items-center gap-3 p-2 border rounded"
-                          >
-                            {item?.foto_barang && (
-                              <img
-                                src={item.foto_barang}
-                                alt={d.nama_barang}
-                                className="w-16 h-16 object-cover rounded"
-                              />
-                            )}
-                            <div className="flex-1">
-                              <div className="font-medium">{d.nama_barang}</div>
-                              <div className="text-xs text-muted-foreground">
-                                Kode:{" "}
-                                <code className="font-mono">
-                                  {d.kode_barang}
+                  <h4 className="font-semibold mb-3">Daftar Barang yang Dipinjam</h4>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-accent">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-semibold">Kode Barang</th>
+                          <th className="px-4 py-2 text-left font-semibold">Nama Barang</th>
+                          <th className="px-4 py-2 text-center font-semibold">Jumlah</th>
+                          <th className="px-4 py-2 text-left font-semibold">Status</th>
+                          <th className="px-4 py-2 text-left font-semibold">Tgl Kembali</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* Dari selectedBorrowing.detail_peminjaman */}
+                        {selectedBorrowing?.detail_peminjaman && 
+                         selectedBorrowing.detail_peminjaman.length > 0 ? (
+                          selectedBorrowing.detail_peminjaman.map((detail: any, idx: number) => (
+                            <tr key={idx} className="border-t hover:bg-accent/30">
+                              <td className="px-4 py-2">
+                                <code className="font-mono text-xs">
+                                  {detail.kode_barang || "-"}
                                 </code>
-                              </div>
-                              {jenis && (
-                                <div className="text-xs text-muted-foreground">
-                                  Jenis: {jenis.nama_jenis_barang}
-                                </div>
-                              )}
-                            </div>
-                            <div className="text-sm">x{d.jumlah}</div>
-                          </div>
-                        );
-                      })}
+                              </td>
+                              <td className="px-4 py-2">
+                                {detail.nama_barang || "-"}
+                              </td>
+                              <td className="px-4 py-2 text-center">1</td>
+                              <td className="px-4 py-2">
+                                <Badge
+                                  variant={
+                                    detail.status === "Dipinjam"
+                                      ? "default"
+                                      : "secondary"
+                                  }
+                                  className={
+                                    detail.status === "Dikembalikan"
+                                      ? "bg-success"
+                                      : detail.status === "Rusak"
+                                      ? "bg-destructive"
+                                      : detail.status === "Hilang"
+                                      ? "bg-destructive"
+                                      : "bg-warning"
+                                  }
+                                >
+                                  {detail.status || "Dipinjam"}
+                                </Badge>
+                              </td>
+                              <td className="px-4 py-2 text-xs">
+                                {detail.tanggal_kembali
+                                  ? formatDateLocal(detail.tanggal_kembali)
+                                  : "-"}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-3 text-center text-muted-foreground">
+                              Tidak ada data barang
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="font-semibold mb-3">Informasi Peminjam</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Nama:</span>
-                        <span className="font-medium">
-                          {selectedBorrowing.nama_peminjam}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Kontak:</span>
-                        <span className="font-medium">
-                          {selectedBorrowing.kontak}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Guru:</span>
-                        <span className="font-medium">
-                          {selectedBorrowing.guru_pendamping}
-                        </span>
-                      </div>
+                {/* Informasi Peminjam */}
+                <div>
+                  <h4 className="font-semibold mb-3">Informasi Peminjam</h4>
+                  <div className="grid md:grid-cols-2 gap-4 text-sm">
+                    <div className="flex justify-between p-2 bg-accent/30 rounded">
+                      <span className="text-muted-foreground">Nama:</span>
+                      <span className="font-medium">
+                        {selectedBorrowing.nama_peminjam}
+                      </span>
                     </div>
-                  </div>
-
-                  <div>
-                    <h4 className="font-semibold mb-3">Informasi Barang</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Barang:</span>
-                        <span className="font-medium">
-                          {selectedBorrowing.nama_barang}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Jumlah:</span>
-                        <span className="font-medium">
-                          {selectedBorrowing.jumlah}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Keperluan:
-                        </span>
-                        <span className="font-medium">
-                          {selectedBorrowing.keperluan}
-                        </span>
-                      </div>
+                    <div className="flex justify-between p-2 bg-accent/30 rounded">
+                      <span className="text-muted-foreground">Kontak:</span>
+                      <span className="font-medium">
+                        {selectedBorrowing.kontak}
+                      </span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-accent/30 rounded">
+                      <span className="text-muted-foreground">Guru Pendamping:</span>
+                      <span className="font-medium">
+                        {selectedBorrowing.guru_pendamping || "-"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-accent/30 rounded">
+                      <span className="text-muted-foreground">Keperluan:</span>
+                      <span className="font-medium">
+                        {selectedBorrowing.keperluan}
+                      </span>
                     </div>
                   </div>
                 </div>
 
+                {/* Timeline */}
                 <div>
                   <h4 className="font-semibold mb-3">Timeline</h4>
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between p-2 bg-accent/30 rounded">
                       <span className="text-muted-foreground">
                         Tanggal Pinjam:
                       </span>
                       <span className="font-medium">
-                        {new Date(
-                          selectedBorrowing.tanggal_pinjam
-                        ).toLocaleString("id-ID")}
+                        {formatDateTimeLocal(selectedBorrowing.tanggal_pinjam)}
                       </span>
                     </div>
                     {selectedBorrowing.tanggal_kembali && (
-                      <div className="flex justify-between">
+                      <div className="flex justify-between p-2 bg-accent/30 rounded">
                         <span className="text-muted-foreground">
                           Tanggal Kembali:
                         </span>
                         <span className="font-medium">
-                          {new Date(
-                            selectedBorrowing.tanggal_kembali
-                          ).toLocaleString("id-ID")}
+                          {formatDateTimeLocal(selectedBorrowing.tanggal_kembali)}
                         </span>
                       </div>
                     )}

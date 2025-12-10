@@ -16,15 +16,17 @@ import { barangAPI, peminjamanAPI } from "@/lib/api";
 type Step = "scan" | "verify" | "complete";
 
 interface DetailPeminjaman {
-  id_detail_peminjaman: number;
-  id_barang: number;
-  status: "Dipinjam" | "Dikembalikan" | "Rusak" | "Hilang";
+  id_detail_peminjaman?: number;
+  id_barang?: number;
+  status?: "Dipinjam" | "Dikembalikan" | "Rusak" | "Hilang";
   tanggal_kembali?: string;
   foto_bukti_kembali?: string;
 }
 
 interface BarangDetail extends Item {
+  id_detail_peminjaman?: number;
   detail_peminjaman?: DetailPeminjaman;
+  id_peminjaman?: number;
 }
 
 const ReturnFlow = () => {
@@ -36,6 +38,8 @@ const ReturnFlow = () => {
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const currentStreamRef = useRef<MediaStream | null>(null);
   const html5QrRef = useRef<Html5Qrcode | null>(null);
+  // Default ke scanner fisik/keyboard; webcam opsional
+  const [scanMode, setScanMode] = useState<"manual" | "qr">("manual");
   const [scannerActive, setScannerActive] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>("scan");
   const [scannedBarcode, setScannedBarcode] = useState("");
@@ -223,7 +227,7 @@ const ReturnFlow = () => {
         });
 
         const detail = detailArray.find((d: any) => {
-          return d.id_barang === item.id_barang && d.status === "Dipinjam";
+          return d.id_barang === (item.id_barang || item.id) && d.status === "Dipinjam";
         });
 
         if (detail) {
@@ -387,74 +391,102 @@ const ReturnFlow = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Scanner Input */}
-              <div className="space-y-4">
-                <Alert className="bg-blue-50 border-blue-200">
-                  <AlertCircle className="h-4 w-4 text-blue-600" />
-                  <AlertDescription className="text-blue-900 text-sm">
-                    <strong>Instruksi:</strong> Letakkan kursor di input box di
-                    bawah, kemudian gunakan alat scanner untuk scan barcode
-                    barang. Input akan otomatis terisi dan diproses.
-                  </AlertDescription>
-                </Alert>
+              {/* Mode toggle */}
+              <div className="flex gap-2">
+                <Button
+                  variant={scanMode === "manual" ? "default" : "outline"}
+                  onClick={() => {
+                    setScanMode("manual");
+                    stopWebcam();
+                  }}
+                  disabled={isLoading}
+                >
+                  Gunakan Scanner/Keyboard (disarankan)
+                </Button>
+                <Button
+                  variant={scanMode === "qr" ? "default" : "outline"}
+                  onClick={() => setScanMode("qr")}
+                  disabled={isLoading}
+                >
+                  Gunakan Webcam
+                </Button>
+              </div>
 
-                <div>
-                  <Label htmlFor="barcode" className="flex items-center gap-2">
-                    <Barcode className="h-4 w-4" />
-                    Barcode Barang *
-                  </Label>
-                  <Input
-                    ref={scanInputRef}
-                    id="barcode"
-                    placeholder="Scan barcode atau ketik kode barang (contoh: BRG-001)"
-                    value={scannedBarcode}
-                    onChange={(e) =>
-                      setScannedBarcode(e.target.value.toUpperCase())
-                    }
-                    onKeyPress={handleKeyPress}
-                    className="text-lg font-mono mt-1 border-2"
-                    autoFocus
-                    disabled={isLoading}
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Tekan Enter atau klik tombol Scan untuk memproses barcode
-                  </p>
-                </div>
+              {scanMode === "manual" ? (
+                <div className="space-y-4">
+                  <Alert className="bg-blue-50 border-blue-200">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-900 text-sm">
+                      <strong>Instruksi:</strong> Letakkan kursor di input box di
+                      bawah, lalu gunakan scanner fisik/keyboard. Biasanya
+                      scanner akan mengetik kode lalu menekan Enter otomatis.
+                    </AlertDescription>
+                  </Alert>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    onClick={handleScanBarcode}
-                    size="lg"
-                    className="w-full"
-                    variant="default"
-                    disabled={isLoading}
-                  >
-                    <Barcode className="h-4 w-4 mr-2" />
-                    Scan
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setScannedBarcode("");
-                      if (scanInputRef.current) {
-                        scanInputRef.current.focus();
+                  <div>
+                    <Label htmlFor="barcode" className="flex items-center gap-2">
+                      <Barcode className="h-4 w-4" />
+                      Barcode Barang *
+                    </Label>
+                    <Input
+                      ref={scanInputRef}
+                      id="barcode"
+                      placeholder="Scan barcode atau ketik kode barang (contoh: BRG-001)"
+                      value={scannedBarcode}
+                      onChange={(e) =>
+                        setScannedBarcode(e.target.value.toUpperCase())
                       }
-                    }}
-                    size="lg"
-                    variant="outline"
-                    disabled={isLoading}
-                  >
-                    Bersihkan
-                  </Button>
-                </div>
-
-                {/* Webcam preview */}
-                <div className="pt-4 border-t">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">
-                      Gunakan Webcam (preview)
+                      onKeyPress={handleKeyPress}
+                      className="text-lg font-mono mt-1 border-2"
+                      autoFocus
+                      disabled={isLoading}
+                    />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Tekan Enter atau klik tombol Scan untuk memproses
                     </p>
-                    <div className="flex items-center gap-2">
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      onClick={handleScanBarcode}
+                      size="lg"
+                      className="w-full"
+                      variant="default"
+                      disabled={isLoading}
+                    >
+                      <Barcode className="h-4 w-4 mr-2" />
+                      Scan
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setScannedBarcode("");
+                        if (scanInputRef.current) {
+                          scanInputRef.current.focus();
+                        }
+                      }}
+                      size="lg"
+                      variant="outline"
+                      disabled={isLoading}
+                    >
+                      Bersihkan
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Alert className="bg-blue-50 border-blue-200">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-900 text-sm">
+                      Mode webcam: pilih kamera lalu tekan Start untuk mulai
+                      scan barcode.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="flex items-center justify-between mb-2 gap-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Label htmlFor="camera-select">Kamera</Label>
                       <select
+                        id="camera-select"
                         value={selectedCameraId ?? ""}
                         onChange={(e) => setSelectedCameraId(e.target.value)}
                         className="text-sm p-1 border rounded"
@@ -465,30 +497,33 @@ const ReturnFlow = () => {
                           </option>
                         ))}
                       </select>
-                      {!webcamEnabled ? (
-                        <Button
-                          size="sm"
-                          onClick={async () => {
-                            const granted = await requestCameraPermission();
-                            if (granted) {
-                              startWebcam(selectedCameraId ?? undefined);
-                            }
-                          }}
-                          disabled={isLoading}
-                        >
-                          Start Webcam
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={stopWebcam}
-                          disabled={isLoading}
-                        >
-                          Stop Webcam
-                        </Button>
-                      )}
                     </div>
+                    {!webcamEnabled ? (
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const granted = await requestCameraPermission();
+                          if (granted) {
+                            startWebcam(selectedCameraId ?? undefined);
+                          }
+                        }}
+                        disabled={isLoading}
+                      >
+                        Start Webcam
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          stopWebcam();
+                          setScannerActive(false);
+                        }}
+                        disabled={isLoading}
+                      >
+                        Stop Webcam
+                      </Button>
+                    )}
                   </div>
 
                   <div className="border rounded p-2">
@@ -508,8 +543,7 @@ const ReturnFlow = () => {
                         variant="outline"
                         onClick={() => {
                           stopWebcam();
-                          if (scanInputRef.current)
-                            scanInputRef.current.focus();
+                          setScannerActive(false);
                         }}
                         disabled={isLoading}
                       >
@@ -518,7 +552,7 @@ const ReturnFlow = () => {
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Info */}
               <Alert>

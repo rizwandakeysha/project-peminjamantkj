@@ -2,6 +2,7 @@
 
 export interface Item {
   id: number;
+  id_barang?: number;
   kode_barang: string;
   nama_barang: string;
   status: 'Tersedia' | 'Dipinjam' | 'Rusak' | 'Hilang';
@@ -28,23 +29,36 @@ export interface BorrowingFormData {
 }
 
 export interface Borrowing {
-  id: number;
+  id?: number;
+  id_peminjaman?: number;
   kode_peminjaman: string;
-  id_barang: number;
+  id_barang?: number;
   nama_peminjam: string;
-  kontak: string;
+  kontak?: string;
   keperluan: string;
-  guru_pendamping: string;
-  jumlah: number;
+  guru_pendamping?: string;
+  jumlah?: number;
   foto_credential?: string;
-  tanggal_pinjam: string;
+  tanggal_pinjam?: string;
   tanggal_kembali?: string;
-  status: 'Dipinjam' | 'Dikembalikan';
+  status?: 'Dipinjam' | 'Dikembalikan' | 'Sebagian Dikembalikan' | 'Selesai';
   signature?: string;
-  created_at: string;
+  created_at?: string;
+  status_transaksi?: string;
   // Joined data
   nama_barang?: string;
   foto_barang?: string;
+  // For API responses with detail_peminjaman array
+  detail_peminjaman?: Array<{
+    id_detail_peminjaman?: number;
+    id_barang?: number;
+    nama_barang?: string;
+    kode_barang?: string;
+    foto_barang?: string;
+    status?: string;
+    tanggal_kembali?: string;
+    foto_bukti_kembali?: string;
+  }>;
 }
 
 export interface Admin {

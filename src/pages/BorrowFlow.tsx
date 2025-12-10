@@ -71,13 +71,25 @@ interface SiswaData {
   created_at: string;
 }
 
+// Hanya guru berikut yang boleh jadi guru pendamping siswa
+const ALLOWED_GURU_PENDAMPING = [
+  "bayu andi",
+  "erlitawanty",
+  "soepardi",
+  "ari subagyo",
+  "winarto",
+  "abdul basit",
+  "rustika",
+];
+
 const BorrowFlow = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<Step>("scan");
   const [cameraUnavailable, setCameraUnavailable] = useState<boolean>(false);
   const [cameraChecked, setCameraChecked] = useState<boolean>(false);
-  const [scanMode, setScanMode] = useState<"qr" | "manual">("qr");
+  // Default to manual (barcode scanner/keyboard input) for faster flow; webcam QR optional
+  const [scanMode, setScanMode] = useState<"qr" | "manual">("manual");
 
   // Data from database
   const [allBarang, setAllBarang] = useState<BarangData[]>([]);
@@ -468,7 +480,23 @@ const BorrowFlow = () => {
         {/* Step: Scan */}
         {currentStep === "scan" && (
           <div className="space-y-6">
-            {!cameraChecked ? (
+            {/* Mode Switcher */}
+            <div className="flex gap-2">
+              <Button
+                variant={scanMode === "manual" ? "default" : "outline"}
+                onClick={() => setScanMode("manual")}
+              >
+                Gunakan Scanner (disarankan)
+              </Button>
+              <Button
+                variant={scanMode === "qr" ? "default" : "outline"}
+                onClick={() => setScanMode("qr")}
+              >
+                Gunakan Webcam
+              </Button>
+            </div>
+
+            {!cameraChecked && scanMode === "qr" ? (
               <Card>
                 <CardContent className="pt-6 pb-6 text-center">
                   <div className="animate-pulse space-y-2">
@@ -506,21 +534,21 @@ const BorrowFlow = () => {
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Kamera tidak tersedia. Silakan input kode barang atau jenis secara manual.
+                      Mode scanner/keyboard: arahkan input ke kotak ini, lalu scan barcode atau ketik kode (BRG-001 / JENIS-001).
                     </AlertDescription>
                   </Alert>
                   <div>
                     <Label htmlFor="manual-code">Kode Barang atau Jenis</Label>
                     <Input
                       id="manual-code"
-                      placeholder="Contoh: BRG-001 atau JENIS-001"
+                      placeholder="Contoh: TKJ-LAPT"
                       className="mt-1"
                       onKeyPress={(e) =>
                         e.key === "Enter" && handleManualCode()
                       }
                     />
                     <p className="text-xs text-muted-foreground mt-2">
-                      Tips: Lihat kode pada label barang atau kategori barang
+                      Tips: Barcode scanner fisik akan mengetik kode otomatis dan menekan Enter; pastikan cursor fokus di field ini.
                     </p>
                   </div>
                   <Button onClick={handleManualCode} className="w-full">
@@ -908,6 +936,11 @@ const BorrowFlow = () => {
                             <CommandEmpty>Tidak ada guru</CommandEmpty>
                             <div className="max-h-64 overflow-y-auto">
                               {allGuru
+                                .filter((g) =>
+                                  ALLOWED_GURU_PENDAMPING.some((allowed) =>
+                                    g.name.toLowerCase().includes(allowed)
+                                  )
+                                )
                                 .filter((t) =>
                                   formatTeacherDisplay(t)
                                     .toLowerCase()

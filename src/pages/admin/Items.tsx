@@ -28,6 +28,7 @@ import {
   Plus,
   QrCode,
   Barcode,
+  Download,
 } from "lucide-react";
 import { mockJenisBarang, mockBarang } from "@/lib/mockData";
 import {
@@ -36,6 +37,7 @@ import {
 } from "@/lib/qrUtils";
 import { createBarcodeDataURL, downloadBarcodePNG } from "@/lib/barcodeUtils";
 import { toast } from "react-hot-toast";
+import JSZip from "jszip";
 
 // Helper function to generate kode_jenis_barang from nama (4 most representative letters with TKJ- prefix)
 const generateKodeJenis = (namaJenis: string): string => {
@@ -144,6 +146,15 @@ const Items = () => {
   const [barcodeDataUrl, setBarcodeDataUrl] = useState<string | null>(null);
   const [barcodeKode, setBarcodeKode] = useState<string>("");
   const [barcodeNama, setBarcodeNama] = useState<string>("");
+  
+  // barcode selection dialog states
+  const [showBarcodeSelectionDialog, setShowBarcodeSelectionDialog] = useState(false);
+  const [selectedBarangForDownload, setSelectedBarangForDownload] = useState<number[]>([]);
+  const [jenisForBarcodeDownload, setJenisForBarcodeDownload] = useState<number | null>(null);
+  
+  // QR jenis selection dialog states
+  const [showQRSelectionDialog, setShowQRSelectionDialog] = useState(false);
+  const [selectedJenisForDownload, setSelectedJenisForDownload] = useState<number[]>([]);
 
   // Form states
   const [jenisFormData, setJenisFormData] = useState({
@@ -171,6 +182,217 @@ const Items = () => {
       jenisBarangList.find((j) => j.id_jenis_barang === jenisId)
         ?.nama_jenis_barang || ""
     );
+  };
+
+  // Open barcode selection dialog
+  const openBarcodeSelectionDialog = (jenisId: number) => {
+    const barangForJenis = getBarangForJenis(jenisId);
+    if (barangForJenis.length === 0) {
+      toast.error("Tidak ada barang untuk jenis ini");
+      return;
+    }
+    
+    setJenisForBarcodeDownload(jenisId);
+    // Select all by default
+    setSelectedBarangForDownload(barangForJenis.map(b => b.id || b.id_barang));
+    setShowBarcodeSelectionDialog(true);
+  };
+
+  // Toggle select all barcode
+  const toggleSelectAllBarcode = () => {
+    if (!jenisForBarcodeDownload) return;
+    
+    const barangForJenis = getBarangForJenis(jenisForBarcodeDownload);
+    if (selectedBarangForDownload.length === barangForJenis.length) {
+      // Deselect all
+      setSelectedBarangForDownload([]);
+    } else {
+      // Select all
+      setSelectedBarangForDownload(barangForJenis.map(b => b.id || b.id_barang));
+    }
+  };
+
+  // Toggle individual barcode selection
+  const toggleBarangSelection = (barangId: number) => {
+    if (selectedBarangForDownload.includes(barangId)) {
+      setSelectedBarangForDownload(selectedBarangForDownload.filter(id => id !== barangId));
+    } else {
+      setSelectedBarangForDownload([...selectedBarangForDownload, barangId]);
+    }
+  };
+
+  // Download selected barcodes as ZIP
+  const downloadSelectedBarcodes = async () => {
+    if (!jenisForBarcodeDownload) return;
+    
+    const jenis = jenisBarangList.find(j => j.id_jenis_barang === jenisForBarcodeDownload);
+    if (!jenis) {
+      toast.error("Jenis barang tidak ditemukan");
+      return;
+    }
+
+    const barangForJenis = getBarangForJenis(jenisForBarcodeDownload);
+    const selectedBarang = barangForJenis.filter(b => 
+      selectedBarangForDownload.includes(b.id || b.id_barang)
+    );
+
+    if (selectedBarang.length === 0) {
+      toast.error("Pilih minimal 1 barang untuk didownload");
+      return;
+    }
+
+    // Close selection dialog
+    setShowBarcodeSelectionDialog(false);
+
+    try {
+      toast.loading(`Membuat ${selectedBarang.length} barcode...`);
+      
+      const zip = new JSZip();
+      const folder = zip.folder(jenis.kode_jenis_barang || jenis.nama_jenis_barang);
+
+      if (!folder) {
+        throw new Error("Gagal membuat folder ZIP");
+      }
+
+      // Generate barcode for each selected barang
+      for (const barang of selectedBarang) {
+        try {
+          const dataUrl = await createBarcodeDataURL(barang.kode_barang, {
+            width: 960,
+            height: 300,
+          });
+          
+          // Convert data URL to blob
+          const response = await fetch(dataUrl);
+          const blob = await response.blob();
+          
+          // Add to ZIP with filename
+          const filename = `${barang.kode_barang}.png`;
+          folder.file(filename, blob);
+        } catch (err) {
+          console.error(`Gagal membuat barcode untuk ${barang.kode_barang}:`, err);
+        }
+      }
+
+      // Generate ZIP and trigger download
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipUrl = URL.createObjectURL(zipBlob);
+      const link = document.createElement("a");
+      link.href = zipUrl;
+      link.download = `barcodes-${jenis.kode_jenis_barang || jenis.nama_jenis_barang}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(zipUrl);
+
+      toast.dismiss();
+      toast.success(`${selectedBarang.length} barcode berhasil didownload!`);
+    } catch (error) {
+      console.error("Error creating ZIP:", error);
+      toast.dismiss();
+      toast.error("Gagal membuat file ZIP");
+    }
+  };
+
+  // ===== QR JENIS BARANG ZIP DOWNLOAD HANDLERS =====
+  // Open QR jenis selection dialog
+  const openQRJenisSelectionDialog = () => {
+    if (jenisBarangList.length === 0) {
+      toast.error("Tidak ada jenis barang");
+      return;
+    }
+    
+    // Select all by default
+    setSelectedJenisForDownload(jenisBarangList.map(j => j.id_jenis_barang));
+    setShowQRSelectionDialog(true);
+  };
+
+  // Toggle select all QR jenis
+  const toggleSelectAllQRJenis = () => {
+    if (selectedJenisForDownload.length === jenisBarangList.length) {
+      // Deselect all
+      setSelectedJenisForDownload([]);
+    } else {
+      // Select all
+      setSelectedJenisForDownload(jenisBarangList.map(j => j.id_jenis_barang));
+    }
+  };
+
+  // Toggle individual jenis selection
+  const toggleJenisSelection = (jenisId: number) => {
+    if (selectedJenisForDownload.includes(jenisId)) {
+      setSelectedJenisForDownload(selectedJenisForDownload.filter(id => id !== jenisId));
+    } else {
+      setSelectedJenisForDownload([...selectedJenisForDownload, jenisId]);
+    }
+  };
+
+  // Download selected QR jenis as ZIP
+  const downloadSelectedQRJenis = async () => {
+    const selectedJenis = jenisBarangList.filter(j => 
+      selectedJenisForDownload.includes(j.id_jenis_barang)
+    );
+
+    if (selectedJenis.length === 0) {
+      toast.error("Pilih minimal 1 jenis barang untuk didownload");
+      return;
+    }
+
+    // Close selection dialog
+    setShowQRSelectionDialog(false);
+
+    try {
+      toast.loading(`Membuat ${selectedJenis.length} QR code...`);
+      
+      const zip = new JSZip();
+      const folder = zip.folder("QR-Jenis-Barang");
+
+      if (!folder) {
+        throw new Error("Gagal membuat folder ZIP");
+      }
+
+      // Generate QR for each selected jenis
+      for (const jenis of selectedJenis) {
+        try {
+          const dataUrl = await createSimpleLabelDataURL(
+            jenis.kode_jenis_barang,
+            jenis.nama_jenis_barang,
+            {
+              width: 720,
+              height: 920,
+            }
+          );
+          
+          // Convert data URL to blob
+          const response = await fetch(dataUrl);
+          const blob = await response.blob();
+          
+          // Add to ZIP with filename
+          const filename = `${jenis.kode_jenis_barang}-${jenis.nama_jenis_barang.replace(/\s+/g, "-")}.png`;
+          folder.file(filename, blob);
+        } catch (err) {
+          console.error(`Gagal membuat QR untuk ${jenis.kode_jenis_barang}:`, err);
+        }
+      }
+
+      // Generate ZIP and trigger download
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const zipUrl = URL.createObjectURL(zipBlob);
+      const link = document.createElement("a");
+      link.href = zipUrl;
+      link.download = `QR-Jenis-Barang.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(zipUrl);
+
+      toast.dismiss();
+      toast.success(`${selectedJenis.length} QR code berhasil didownload!`);
+    } catch (error) {
+      console.error("Error creating ZIP:", error);
+      toast.dismiss();
+      toast.error("Gagal membuat file ZIP");
+    }
   };
 
   // ===== JENIS BARANG HANDLERS =====
@@ -709,6 +931,15 @@ const Items = () => {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              className="gap-2"
+              onClick={openQRJenisSelectionDialog}
+              disabled={jenisBarangList.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              Download QR Jenis (ZIP)
+            </Button>
             <Dialog
               open={showImportJenisBarangDialog}
               onOpenChange={setShowImportJenisBarangDialog}
@@ -1022,6 +1253,16 @@ const Items = () => {
                                     {getJenisName(selectedJenisId || 0)}
                                   </DialogTitle>
                                   <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => openBarcodeSelectionDialog(selectedJenisId || 0)}
+                                      className="gap-2"
+                                      disabled={getBarangForJenis(selectedJenisId || 0).length === 0}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                      Download Semua Barcode (ZIP)
+                                    </Button>
                                     <Dialog
                                       open={showImportDialog}
                                       onOpenChange={setShowImportDialog}
@@ -1603,6 +1844,178 @@ const Items = () => {
                   }
                 >
                   Download
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Barcode Selection Dialog for ZIP Download */}
+        <Dialog open={showBarcodeSelectionDialog} onOpenChange={setShowBarcodeSelectionDialog}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Pilih Barcode untuk Didownload</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="select-all-barcode"
+                    checked={jenisForBarcodeDownload ? selectedBarangForDownload.length === getBarangForJenis(jenisForBarcodeDownload).length : false}
+                    onChange={toggleSelectAllBarcode}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="select-all-barcode" className="font-semibold cursor-pointer">
+                    Pilih Semua ({jenisForBarcodeDownload ? getBarangForJenis(jenisForBarcodeDownload).length : 0} barang)
+                  </label>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {selectedBarangForDownload.length} terpilih
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {jenisForBarcodeDownload && getBarangForJenis(jenisForBarcodeDownload).map((barang) => (
+                  <div
+                    key={barang.id || barang.id_barang}
+                    className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                    onClick={() => toggleBarangSelection(barang.id || barang.id_barang)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedBarangForDownload.includes(barang.id || barang.id_barang)}
+                      onChange={() => toggleBarangSelection(barang.id || barang.id_barang)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    {barang.foto_barang && (
+                      <img
+                        src={barang.foto_barang}
+                        alt={barang.nama_barang}
+                        className="w-12 h-12 object-cover rounded"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <div className="font-medium">{barang.nama_barang}</div>
+                      <div className="text-xs text-muted-foreground font-mono">
+                        {barang.kode_barang}
+                      </div>
+                    </div>
+                    <span
+                      className={`px-2 py-1 rounded text-xs font-semibold ${
+                        barang.status === "Tersedia"
+                          ? "bg-green-100 text-green-700"
+                          : barang.status === "Dipinjam"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {barang.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowBarcodeSelectionDialog(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  onClick={downloadSelectedBarcodes}
+                  disabled={selectedBarangForDownload.length === 0}
+                  className="gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download {selectedBarangForDownload.length} Barcode
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* QR Jenis Selection Dialog for ZIP Download */}
+        <Dialog open={showQRSelectionDialog} onOpenChange={setShowQRSelectionDialog}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Pilih QR Jenis Barang untuk Didownload</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="select-all-qr-jenis"
+                    checked={selectedJenisForDownload.length === jenisBarangList.length}
+                    onChange={toggleSelectAllQRJenis}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="select-all-qr-jenis" className="font-semibold cursor-pointer">
+                    Pilih Semua ({jenisBarangList.length} jenis barang)
+                  </label>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {selectedJenisForDownload.length} terpilih
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {jenisBarangList.map((jenis) => {
+                  const itemCount = barangList.filter(
+                    (b) => b.id_jenis_barang === jenis.id_jenis_barang
+                  ).length;
+                  
+                  return (
+                    <div
+                      key={jenis.id_jenis_barang}
+                      className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                      onClick={() => toggleJenisSelection(jenis.id_jenis_barang)}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedJenisForDownload.includes(jenis.id_jenis_barang)}
+                        onChange={() => toggleJenisSelection(jenis.id_jenis_barang)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <code className="bg-muted px-2 py-1 rounded text-xs font-semibold text-primary">
+                            {jenis.kode_jenis_barang}
+                          </code>
+                          <span className="font-medium">{jenis.nama_jenis_barang}</span>
+                        </div>
+                        {jenis.deskripsi_jenis_barang && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {jenis.deskripsi_jenis_barang}
+                          </div>
+                        )}
+                      </div>
+                      <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                        {itemCount} item
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowQRSelectionDialog(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  onClick={downloadSelectedQRJenis}
+                  disabled={selectedJenisForDownload.length === 0}
+                  className="gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download {selectedJenisForDownload.length} QR Code
                 </Button>
               </div>
             </div>

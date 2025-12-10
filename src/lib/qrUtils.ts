@@ -46,7 +46,7 @@ export const generateQRCode = async (
           errorCorrectionLevel: "H",
         },
         dotsOptions: {
-          type: "classy-rounded",
+          type: "square",
           gradient: {
             type: "linear",
             rotation: 5,
