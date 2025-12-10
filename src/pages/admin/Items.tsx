@@ -131,6 +131,10 @@ const Items = () => {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showImportJenisBarangDialog, setShowImportJenisBarangDialog] =
     useState(false);
+  const [showBarangImportPreviewDialog, setShowBarangImportPreviewDialog] =
+    useState(false);
+  const [showJenisImportPreviewDialog, setShowJenisImportPreviewDialog] =
+    useState(false);
   const [editingBarang, setEditingBarang] = useState<any | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     type: "jenis" | "barang";
@@ -155,6 +159,10 @@ const Items = () => {
   // QR jenis selection dialog states
   const [showQRSelectionDialog, setShowQRSelectionDialog] = useState(false);
   const [selectedJenisForDownload, setSelectedJenisForDownload] = useState<number[]>([]);
+  const [barangImportPreview, setBarangImportPreview] = useState<any[]>([]);
+  const [barangImportFileName, setBarangImportFileName] = useState("");
+  const [jenisImportPreview, setJenisImportPreview] = useState<any[]>([]);
+  const [jenisImportFileName, setJenisImportFileName] = useState("");
 
   // Form states
   const [jenisFormData, setJenisFormData] = useState({
@@ -652,7 +660,11 @@ const Items = () => {
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
-    if (!file || !selectedJenisId) return;
+    if (!file) return;
+    if (!selectedJenisId) {
+      toast.error("Pilih jenis barang terlebih dahulu");
+      return;
+    }
 
     try {
       setLoading(true);
@@ -677,11 +689,15 @@ const Items = () => {
         return;
       }
 
-      // Get kode_jenis for auto-generating kode_barang
       const jenisBarang = jenisBarangList.find(
         (j) => j.id_jenis_barang === selectedJenisId
       );
-      const kodeJenis = jenisBarang?.kode_jenis_barang || "";
+      if (!jenisBarang) {
+        toast.error("Jenis barang tidak ditemukan");
+        return;
+      }
+
+      const kodeJenis = jenisBarang.kode_jenis_barang || "";
       const currentBarangForJenis = barangList.filter(
         (b) => b.id_jenis_barang === selectedJenisId
       );
@@ -720,22 +736,19 @@ const Items = () => {
         return;
       }
 
-      // Create all items via API
-      const createdBarang: any[] = [];
-      for (const barang of newBarang) {
-        const created = await barangAPI.create(barang);
-        createdBarang.push(created);
-      }
-
-      setBarangList([...barangList, ...createdBarang]);
-      toast.success(`${createdBarang.length} barang berhasil diimport!`);
+      setBarangImportPreview(newBarang);
+      setBarangImportFileName(file.name);
       setShowImportDialog(false);
-      event.target.value = "";
+      setShowBarangImportPreviewDialog(true);
+      toast.success(
+        `${newBarang.length} barang siap diimport. Silakan review dulu.`
+      );
     } catch (error) {
       console.error("Error importing:", error);
       toast.error("Gagal mengimport file. Pastikan format CSV benar.");
     } finally {
       setLoading(false);
+      event.target.value = "";
     }
   };
 
@@ -807,90 +820,176 @@ const Items = () => {
         return;
       }
 
-      // Create jenis barang and barang for each jenis
-      const createdJenis: any[] = [];
-      const createdBarang: any[] = [];
+      const previewList: any[] = [];
 
       for (const [jenisNama, jenisData] of jenisMap.entries()) {
-        try {
-          // Create jenis barang
-          const kodeJenis = generateKodeJenis(jenisNama);
-          const jenisPayload = {
-            kode_jenis: kodeJenis,
-            nama_jenis: jenisNama,
-            deskripsi: jenisData.deskripsi,
-          };
+        const existingJenis = jenisBarangList.find(
+          (j) => j.nama_jenis_barang.toLowerCase() === jenisNama.toLowerCase()
+        );
 
-          // Check if jenis already exists
-          let createdJenisData = jenisBarangList.find(
-            (j) => j.nama_jenis_barang.toLowerCase() === jenisNama.toLowerCase()
+        const kodeJenis =
+          existingJenis?.kode_jenis_barang || generateKodeJenis(jenisNama);
+
+        const baseBarangForJenis = existingJenis
+          ? barangList.filter((b) => b.id_jenis_barang === existingJenis.id_jenis_barang)
+          : [];
+
+        const barangPreview: any[] = [];
+
+        for (let j = 0; j < jenisData.barang.length; j++) {
+          const barangToCreate = jenisData.barang[j];
+          const barangForThisJenis = [...baseBarangForJenis, ...barangPreview];
+          const generatedKode = generateKodeBarang(
+            kodeJenis,
+            barangForThisJenis
           );
 
-          if (!createdJenisData) {
-            createdJenisData = await jenisBarangAPI.create(jenisPayload);
-            // Map response to local format
-            createdJenisData = {
-              id_jenis_barang: createdJenisData.id,
-              kode_jenis_barang:
-                createdJenisData.kode_jenis ||
-                createdJenisData.kode_jenis_barang,
-              nama_jenis_barang:
-                createdJenisData.nama_jenis ||
-                createdJenisData.nama_jenis_barang,
-              deskripsi_jenis_barang:
-                createdJenisData.deskripsi ||
-                createdJenisData.deskripsi_jenis_barang,
-            };
-            createdJenis.push(createdJenisData);
-            setJenisBarangList((prev) => [...prev, createdJenisData]);
-          }
-
-          // Create barang for this jenis
-          const jenisId = createdJenisData.id_jenis_barang;
-          const currentBarangForJenis = barangList.filter(
-            (b) => b.id_jenis_barang === jenisId
-          );
-
-          for (let j = 0; j < jenisData.barang.length; j++) {
-            const barangToCreate = jenisData.barang[j];
-            const barangForThisJenis = [
-              ...currentBarangForJenis,
-              ...createdBarang.filter((b) => b.id_jenis_barang === jenisId),
-            ];
-            const generatedKode = generateKodeBarang(
-              createdJenisData.kode_jenis_barang,
-              barangForThisJenis
-            );
-
-            const barangPayload = {
-              id_jenis_barang: jenisId,
-              nama_barang: barangToCreate.nama_barang,
-              kode_barang: generatedKode,
-              no_serial_number: barangToCreate.no_serial_number,
-              deskripsi_barang: barangToCreate.deskripsi_barang,
-              status: barangToCreate.status,
-              foto_barang: barangToCreate.foto_barang,
-            };
-
-            const created = await barangAPI.create(barangPayload);
-            createdBarang.push(created);
-          }
-        } catch (err) {
-          console.error(`Error creating jenis/barang for ${jenisNama}:`, err);
-          toast.error(`Gagal membuat data untuk jenis ${jenisNama}`);
+          barangPreview.push({
+            id_jenis_barang: existingJenis?.id_jenis_barang || null,
+            nama_barang: barangToCreate.nama_barang,
+            kode_barang: generatedKode,
+            no_serial_number: barangToCreate.no_serial_number,
+            deskripsi_barang: barangToCreate.deskripsi_barang,
+            status: barangToCreate.status,
+            foto_barang: barangToCreate.foto_barang,
+          });
         }
+
+        previewList.push({
+          nama_jenis_barang: jenisNama,
+          deskripsi_jenis_barang: jenisData.deskripsi,
+          kode_jenis_barang: kodeJenis,
+          id_jenis_barang: existingJenis?.id_jenis_barang || null,
+          existing: Boolean(existingJenis),
+          barang: barangPreview,
+        });
       }
 
-      setBarangList([...barangList, ...createdBarang]);
-      setJenisBarangList((prev) => [...prev, ...createdJenis]);
-      toast.success(
-        `${createdJenis.length} jenis dan ${createdBarang.length} barang berhasil diimport!`
+      const totalBarangPreview = previewList.reduce(
+        (acc, jenis) => acc + (jenis.barang?.length || 0),
+        0
       );
+
+      setJenisImportPreview(previewList);
+      setJenisImportFileName(file.name);
       setShowImportJenisBarangDialog(false);
-      event.target.value = "";
+      setShowJenisImportPreviewDialog(true);
+      toast.success(
+        `${previewList.length} jenis dan ${totalBarangPreview} barang siap diimport. Silakan review dulu.`
+      );
     } catch (error) {
       console.error("Error importing:", error);
       toast.error("Gagal mengimport file. Pastikan format CSV benar.");
+    } finally {
+      setLoading(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleConfirmImportBarang = async () => {
+    if (!selectedJenisId || barangImportPreview.length === 0) {
+      toast.error("Tidak ada data yang siap diimport");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const createdBarang: any[] = [];
+
+      for (const barang of barangImportPreview) {
+        const payload = {
+          ...barang,
+          id_jenis_barang: selectedJenisId,
+        };
+        const created = await barangAPI.create(payload);
+        createdBarang.push(created);
+      }
+
+      setBarangList([...barangList, ...createdBarang]);
+      toast.success(`${createdBarang.length} barang berhasil diimport!`);
+      setShowBarangImportPreviewDialog(false);
+      setBarangImportPreview([]);
+      setBarangImportFileName("");
+    } catch (error) {
+      console.error("Error importing barang:", error);
+      toast.error("Gagal mengimport barang");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmImportJenisBarang = async () => {
+    if (jenisImportPreview.length === 0) {
+      toast.error("Tidak ada data yang siap diimport");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const createdJenis: any[] = [];
+      const createdBarang: any[] = [];
+
+      for (const jenisPreview of jenisImportPreview) {
+        let targetJenis = jenisBarangList.find(
+          (j) => j.id_jenis_barang === jenisPreview.id_jenis_barang
+        );
+
+        if (!targetJenis) {
+          targetJenis = jenisBarangList.find(
+            (j) =>
+              j.nama_jenis_barang.toLowerCase() ===
+              jenisPreview.nama_jenis_barang.toLowerCase()
+          );
+        }
+
+        if (!targetJenis) {
+          const created: any = await jenisBarangAPI.create({
+            kode_jenis: jenisPreview.kode_jenis_barang,
+            nama_jenis: jenisPreview.nama_jenis_barang,
+            deskripsi: jenisPreview.deskripsi_jenis_barang,
+          });
+
+          targetJenis = {
+            id_jenis_barang: created.id,
+            kode_jenis_barang: created.kode_jenis || created.kode_jenis_barang,
+            nama_jenis_barang: created.nama_jenis || created.nama_jenis_barang,
+            deskripsi_jenis_barang:
+              created.deskripsi || created.deskripsi_jenis_barang,
+          };
+
+          createdJenis.push(targetJenis);
+        }
+
+        const jenisId = targetJenis.id_jenis_barang;
+
+        for (const barang of jenisPreview.barang) {
+          const payload = {
+            ...barang,
+            id_jenis_barang: jenisId,
+          };
+
+          const created = await barangAPI.create(payload);
+          createdBarang.push(created);
+        }
+      }
+
+      if (createdJenis.length > 0) {
+        setJenisBarangList([...jenisBarangList, ...createdJenis]);
+      }
+
+      if (createdBarang.length > 0) {
+        setBarangList([...barangList, ...createdBarang]);
+      }
+
+      toast.success(
+        `${createdJenis.length} jenis dan ${createdBarang.length} barang berhasil diimport!`
+      );
+      setShowJenisImportPreviewDialog(false);
+      setJenisImportPreview([]);
+      setJenisImportFileName("");
+    } catch (error) {
+      console.error("Error importing jenis/barang:", error);
+      toast.error("Gagal mengimport jenis/barang");
     } finally {
       setLoading(false);
     }
@@ -1637,6 +1736,211 @@ const Items = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Import Barang Preview Dialog */}
+        <Dialog
+          open={showBarangImportPreviewDialog}
+          onOpenChange={(open) => {
+            setShowBarangImportPreviewDialog(open);
+            if (!open) {
+              setBarangImportPreview([]);
+              setBarangImportFileName("");
+            }
+          }}
+        >
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Review Import Barang</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                {getJenisName(selectedJenisId || 0)}
+                {barangImportFileName ? ` • File: ${barangImportFileName}` : ""}
+              </p>
+            </DialogHeader>
+            <div className="max-h-[50vh] overflow-y-auto border rounded-lg">
+              {barangImportPreview.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="text-left p-3 font-semibold">Kode</th>
+                      <th className="text-left p-3 font-semibold">Nama</th>
+                      <th className="text-left p-3 font-semibold">Serial</th>
+                      <th className="text-left p-3 font-semibold">Deskripsi</th>
+                      <th className="text-left p-3 font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {barangImportPreview.map((barang, idx) => (
+                      <tr key={idx} className="hover:bg-muted/50">
+                        <td className="p-3 font-mono text-xs text-primary">{barang.kode_barang}</td>
+                        <td className="p-3 font-medium">{barang.nama_barang}</td>
+                        <td className="p-3 text-xs text-muted-foreground">
+                          {barang.no_serial_number || "-"}
+                        </td>
+                        <td className="p-3 text-xs text-muted-foreground">
+                          {barang.deskripsi_barang || "-"}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-semibold ${
+                              barang.status === "Tersedia"
+                                ? "bg-green-100 text-green-700"
+                                : barang.status === "Dipinjam"
+                                ? "bg-yellow-100 text-yellow-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {barang.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-6 text-center text-muted-foreground text-sm">
+                  Tidak ada data untuk diimport
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-4">
+              <p className="text-xs text-muted-foreground">
+                Kode barang sudah digenerate otomatis. Pastikan data sudah benar.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowBarangImportPreviewDialog(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  onClick={handleConfirmImportBarang}
+                  disabled={barangImportPreview.length === 0}
+                >
+                  Import {barangImportPreview.length} Barang
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Jenis + Barang Preview Dialog */}
+        <Dialog
+          open={showJenisImportPreviewDialog}
+          onOpenChange={(open) => {
+            setShowJenisImportPreviewDialog(open);
+            if (!open) {
+              setJenisImportPreview([]);
+              setJenisImportFileName("");
+            }
+          }}
+        >
+          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Review Import Jenis & Barang</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                {jenisImportFileName ? `File: ${jenisImportFileName} • ` : ""}
+                {jenisImportPreview.length} jenis, {jenisImportPreview.reduce((acc, j) => acc + (j.barang?.length || 0), 0)} barang
+              </p>
+            </DialogHeader>
+            <div className="space-y-4">
+              {jenisImportPreview.length > 0 ? (
+                jenisImportPreview.map((jenis, idx) => (
+                  <div key={idx} className="border rounded-lg overflow-hidden">
+                    <div className="flex items-start justify-between gap-3 bg-muted p-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <code className="bg-white/60 px-2 py-1 rounded text-xs font-semibold text-primary">
+                            {jenis.kode_jenis_barang}
+                          </code>
+                          <span className="font-semibold">{jenis.nama_jenis_barang}</span>
+                        </div>
+                        {jenis.deskripsi_jenis_barang && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {jenis.deskripsi_jenis_barang}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-xs font-semibold uppercase text-muted-foreground">
+                        {jenis.existing ? "Sudah ada" : "Jenis baru"}
+                      </span>
+                    </div>
+                    <div className="max-h-[40vh] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/80">
+                          <tr>
+                            <th className="text-left p-3 font-semibold">Kode Barang</th>
+                            <th className="text-left p-3 font-semibold">Nama</th>
+                            <th className="text-left p-3 font-semibold">Serial</th>
+                            <th className="text-left p-3 font-semibold">Deskripsi</th>
+                            <th className="text-left p-3 font-semibold">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {jenis.barang.map((barang: any, bIdx: number) => (
+                            <tr key={`${idx}-${bIdx}`} className="hover:bg-muted/50">
+                              <td className="p-3 font-mono text-xs text-primary">
+                                {barang.kode_barang}
+                              </td>
+                              <td className="p-3 font-medium">{barang.nama_barang}</td>
+                              <td className="p-3 text-xs text-muted-foreground">
+                                {barang.no_serial_number || "-"}
+                              </td>
+                              <td className="p-3 text-xs text-muted-foreground">
+                                {barang.deskripsi_barang || "-"}
+                              </td>
+                              <td className="p-3">
+                                <span
+                                  className={`px-2 py-1 rounded text-xs font-semibold ${
+                                    barang.status === "Tersedia"
+                                      ? "bg-green-100 text-green-700"
+                                      : barang.status === "Dipinjam"
+                                      ? "bg-yellow-100 text-yellow-700"
+                                      : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {barang.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {jenis.barang.length === 0 && (
+                        <div className="p-4 text-center text-muted-foreground text-sm">
+                          Tidak ada barang pada jenis ini
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-6 text-center text-muted-foreground text-sm">
+                  Tidak ada data untuk diimport
+                </div>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-4">
+              <p className="text-xs text-muted-foreground">
+                Kode jenis dan barang sudah digenerate. Jika jenis sudah ada, barang baru akan ditambahkan ke jenis tersebut.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowJenisImportPreviewDialog(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  onClick={handleConfirmImportJenisBarang}
+                  disabled={jenisImportPreview.length === 0}
+                >
+                  Import Semua
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Add/Edit Barang Dialog */}
         <Dialog
