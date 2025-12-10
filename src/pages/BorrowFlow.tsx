@@ -195,53 +195,69 @@ const BorrowFlow = () => {
   const handleQRScan = useCallback(
     async (decodedText: string) => {
       try {
+        // Aggressive whitespace handling: trim all spaces, tabs, newlines
+        const normalized = decodedText
+          .trim()
+          .replace(/[\s\t\n\r]/g, "")
+          .toUpperCase();
+        
+        const scannedCode = normalized;
+        
         // Deduplication using ref: ignore if same code scanned within SCAN_DEBOUNCE_MS
         const now = Date.now();
         if (
-          decodedText === lastScanRef.current.code &&
+          scannedCode === lastScanRef.current.code &&
           now - lastScanRef.current.time < SCAN_DEBOUNCE_MS
         ) {
-          console.log("Duplicate scan ignored:", decodedText);
           return;
         }
 
-        lastScanRef.current = { code: decodedText, time: now };
+        lastScanRef.current = { code: scannedCode, time: now };
 
-        // Check if it's a jenis code
-        const jenisBarang = allBarang.find((b) => b.kode_jenis === decodedText);
-
-        if (jenisBarang) {
-          // Scan jenis - get all barang with this jenis code
-          const itemsOfJenis = allBarang.filter(
-            (b) => b.kode_jenis === decodedText && b.status === "Tersedia"
-          );
-          if (itemsOfJenis.length > 0) {
-            setSelectedJenisCode(decodedText);
-            setAvailableItems(itemsOfJenis);
+        // Try to match jenis_barang via API first
+        try {
+          const itemsOfJenis = await barangAPI.getByJenis(scannedCode);
+          
+          // Filter to only available items
+          const availableByJenis = itemsOfJenis.filter(b => b.status === "Tersedia");
+          
+          if (availableByJenis.length > 0) {
+            setSelectedJenisCode(scannedCode);
+            setAvailableItems(availableByJenis);
             setSelectedItem(null);
             setSelectedItemIds([]);
             setCurrentStep("form");
             toast.success(
-              `${itemsOfJenis.length} barang tersedia untuk jenis ini`
+              `${availableByJenis.length} barang tersedia untuk jenis "${scannedCode}"`
             );
             return;
-          } else {
-            toast.error("Tidak ada barang tersedia untuk jenis ini");
+          } else if (itemsOfJenis.length > 0) {
+            // Jenis found but all items not available
+            toast.error(
+              `Jenis "${scannedCode}" ditemukan tapi semua barang sedang dipinjam`
+            );
             return;
           }
+        } catch (jenisError) {
+          // Jenis tidak ditemukan, lanjut ke fallback
         }
 
-        // Check if it's individual barang code
-        const barang = allBarang.find((b) => b.kode_barang === decodedText);
-
-        if (barang) {
-          if (barang.status !== "Tersedia") {
-            toast.error(`Barang tidak tersedia (Status: ${barang.status})`);
-            return;
+        // Fallback: Try to find by kode_barang (individual item)
+        const barangByKodeAny = allBarang.find(
+          (b) => {
+            const normBarangCode = (b.kode_barang || "")
+              .trim()
+              .replace(/[\s\t\n\r]/g, "")
+              .toUpperCase();
+            return normBarangCode === scannedCode;
           }
+        );
 
-          setSelectedItem(barang);
-          setSelectedJenisCode(barang.kode_jenis || null);
+        const barangByKode = barangByKodeAny?.status === "Tersedia" ? barangByKodeAny : null;
+
+        if (barangByKode) {
+          setSelectedItem(barangByKode);
+          setSelectedJenisCode(barangByKode.kode_jenis || null);
           setAvailableItems([]);
           setSelectedItemIds([]);
           setFormData({
@@ -251,10 +267,14 @@ const BorrowFlow = () => {
             guru_pendamping: "",
           });
           setCurrentStep("form");
-          toast.success(`Barang "${barang.nama_barang}" dipilih`);
-        } else {
-          toast.error("QR Code tidak valid atau barang tidak ditemukan");
+          toast.success(`Barang "${barangByKode.nama_barang}" dipilih`);
+          return;
         }
+
+        // If nothing found
+        toast.error(
+          `QR Code tidak valid: "${decodedText}"\n\nTidak ada kode barang atau jenis yang cocok`
+        );
       } catch (error) {
         console.error("Error in QR scan:", error);
         toast.error("Gagal memproses QR Code");
@@ -264,15 +284,16 @@ const BorrowFlow = () => {
   );
 
   const handleManualCode = () => {
-    const kodeBarang = (
-      document.getElementById("manual-code") as HTMLInputElement
-    )?.value;
-    if (kodeBarang) {
-      handleQRScan(kodeBarang);
-      (document.getElementById("manual-code") as HTMLInputElement).value = "";
-    } else {
-      toast.error("Masukkan kode barang");
+    const inputElement = document.getElementById("manual-code") as HTMLInputElement;
+    const kodeBarang = inputElement?.value?.trim();
+    
+    if (!kodeBarang) {
+      toast.error("Masukkan kode barang atau jenis");
+      return;
     }
+    
+    handleQRScan(kodeBarang);
+    inputElement.value = "";
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -459,40 +480,47 @@ const BorrowFlow = () => {
                 </CardContent>
               </Card>
             ) : scanMode === "qr" ? (
-              <QRScanner
-                key="qr-scanner"
-                onScanSuccess={handleQRScan}
-                onClose={() => navigate("/")}
-                onUnavailable={() => {
-                  setCameraUnavailable(true);
-                  setScanMode("manual");
-                }}
-              />
+              <>
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Scan QR Code barang atau kategori. Anda dapat scan kode barang individual (BRG-001) atau kode jenis (JENIS-001)
+                  </AlertDescription>
+                </Alert>
+                <QRScanner
+                  key="qr-scanner"
+                  onScanSuccess={handleQRScan}
+                  onClose={() => navigate("/")}
+                  onUnavailable={() => {
+                    setCameraUnavailable(true);
+                    setScanMode("manual");
+                  }}
+                />
+              </>
             ) : (
               <Card>
                 <CardHeader>
-                  <CardTitle>Masukkan Kode Barang</CardTitle>
+                  <CardTitle>Masukkan Kode Barang/Jenis</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Kamera tidak tersedia. Silakan input kode barang secara
-                      manual.
+                      Kamera tidak tersedia. Silakan input kode barang atau jenis secara manual.
                     </AlertDescription>
                   </Alert>
                   <div>
-                    <Label htmlFor="manual-code">Kode Barang</Label>
+                    <Label htmlFor="manual-code">Kode Barang atau Jenis</Label>
                     <Input
                       id="manual-code"
-                      placeholder="Contoh: BRG-001"
+                      placeholder="Contoh: BRG-001 atau JENIS-001"
                       className="mt-1"
                       onKeyPress={(e) =>
                         e.key === "Enter" && handleManualCode()
                       }
                     />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Lihat kode pada label barang
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Tips: Lihat kode pada label barang atau kategori barang
                     </p>
                   </div>
                   <Button onClick={handleManualCode} className="w-full">

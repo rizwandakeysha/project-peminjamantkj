@@ -78,6 +78,7 @@ const QRScanner = ({
       setError("");
       hasStoppedRef.current = false;
       if (isScanning) return; // avoid starting twice
+      
       // Prefer native BarcodeDetector when available (faster)
       const supportsBarcodeDetector =
         typeof (window as any).BarcodeDetector === "function";
@@ -106,7 +107,6 @@ const QRScanner = ({
             },
             audio: false,
           });
-
           video.srcObject = stream;
           await video.play();
 
@@ -127,8 +127,9 @@ const QRScanner = ({
                   isProcessingRef.current = true;
 
                   const code = barcodes[0];
+                  const decodedValue = code.rawValue || code.rawText || "";
                   await stopScanner(false);
-                  onScanSuccess(code.rawValue || code.rawText || "");
+                  onScanSuccess(decodedValue);
                   return;
                 }
               } catch (e) {
