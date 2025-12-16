@@ -88,7 +88,7 @@ const BorrowFlow = () => {
   const [currentStep, setCurrentStep] = useState<Step>("scan");
   const [cameraUnavailable, setCameraUnavailable] = useState<boolean>(false);
   const [cameraChecked, setCameraChecked] = useState<boolean>(false);
-  // Default to manual (barcode scanner/keyboard input) for faster flow; webcam QR optional
+  // Default to scanner fisik/keyboard; kamera QR opsional
   const [scanMode, setScanMode] = useState<"qr" | "manual">("manual");
 
   // Data from database
@@ -128,6 +128,8 @@ const BorrowFlow = () => {
   const [searchNamaPeminjam, setSearchNamaPeminjam] = useState("");
   const [openGuruPendamping, setOpenGuruPendamping] = useState(false);
   const [searchGuruPendamping, setSearchGuruPendamping] = useState("");
+
+  const manualInputRef = useRef<HTMLInputElement | null>(null);
 
   // Refs to sync popover width with trigger
   const kelasTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -203,6 +205,17 @@ const BorrowFlow = () => {
       setFormData((prev) => ({ ...prev, nama_peminjam: "" }));
     }
   }, [selectedKelas, borrowerRole, allSiswa]);
+
+  // Auto-focus manual input so scanner fisik langsung siap ketik di kotak input
+  useEffect(() => {
+    if (currentStep === "scan" && scanMode === "manual") {
+      const timer = setTimeout(() => {
+        manualInputRef.current?.focus();
+        manualInputRef.current?.select();
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [currentStep, scanMode]);
 
   const handleQRScan = useCallback(
     async (decodedText: string) => {
@@ -296,16 +309,19 @@ const BorrowFlow = () => {
   );
 
   const handleManualCode = () => {
-    const inputElement = document.getElementById("manual-code") as HTMLInputElement;
-    const kodeBarang = inputElement?.value?.trim();
-    
+    const kodeBarang = manualInputRef.current?.value?.trim();
+
     if (!kodeBarang) {
       toast.error("Masukkan kode barang atau jenis");
+      manualInputRef.current?.focus();
       return;
     }
-    
+
     handleQRScan(kodeBarang);
-    inputElement.value = "";
+    if (manualInputRef.current) {
+      manualInputRef.current.value = "";
+      manualInputRef.current.focus();
+    }
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -480,19 +496,45 @@ const BorrowFlow = () => {
         {/* Step: Scan */}
         {currentStep === "scan" && (
           <div className="space-y-6">
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/30 rounded-2xl p-4 md:p-5 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <p className="text-sm uppercase tracking-wide text-primary font-semibold">
+                    {scanMode === "qr" ? "Mode Kamera QR" : "Mode Scanner Fisik/Manual"}
+                  </p>
+                  <h3 className="text-xl font-bold text-foreground">
+                    {scanMode === "qr"
+                      ? "Arahkan QR ke frame bercahaya di layar"
+                      : "Scanner fisik siap, cukup arahkan atau ketik kode"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {scanMode === "qr"
+                      ? "Kamera membaca otomatis. Jika lebih cepat dengan scanner fisik, pindah ke Input Manual."
+                      : "Kursor otomatis fokus di kolom input; scanner fisik mengetik dan tekan Enter. Kamera tetap tersedia di tab sebelah."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 bg-white/60 backdrop-blur px-3 py-2 rounded-xl border border-border">
+                  <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-sm font-medium text-foreground">
+                    {scanMode === "qr" ? "Ready • Kamera aktif" : "Ready • Input fokus"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Mode Switcher */}
             <div className="flex gap-2">
               <Button
                 variant={scanMode === "manual" ? "default" : "outline"}
                 onClick={() => setScanMode("manual")}
               >
-                Gunakan Scanner (disarankan)
+                Scanner Fisik / Manual (disarankan)
               </Button>
               <Button
                 variant={scanMode === "qr" ? "default" : "outline"}
                 onClick={() => setScanMode("qr")}
               >
-                Gunakan Webcam
+                Kamera QR
               </Button>
             </div>
 
@@ -534,7 +576,8 @@ const BorrowFlow = () => {
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Mode scanner/keyboard: arahkan input ke kotak ini, lalu scan barcode atau ketik kode (BRG-001 / JENIS-001).
+                      Mode ini untuk scanner fisik/keyboard atau jika kamera tidak tersedia. Pastikan kursor fokus di kotak input.
+                      Barcode scanner biasanya mengetik otomatis lalu menekan Enter.
                     </AlertDescription>
                   </Alert>
                   <div>
@@ -543,12 +586,13 @@ const BorrowFlow = () => {
                       id="manual-code"
                       placeholder="Contoh: TKJ-LAPT"
                       className="mt-1"
+                      ref={manualInputRef}
                       onKeyPress={(e) =>
                         e.key === "Enter" && handleManualCode()
                       }
                     />
                     <p className="text-xs text-muted-foreground mt-2">
-                      Tips: Barcode scanner fisik akan mengetik kode otomatis dan menekan Enter; pastikan cursor fokus di field ini.
+                      Tips: jika menggunakan scanner fisik, biarkan kursor tetap di sini agar setiap scan langsung diproses.
                     </p>
                   </div>
                   <Button onClick={handleManualCode} className="w-full">

@@ -2,10 +2,20 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Get upload path from .env or use default
+const uploadPath = process.env.UPLOAD_PATH || './uploads';
+
+// Create absolute path - support both relative and absolute paths
+const uploadsDir = path.isAbsolute(uploadPath) 
+  ? uploadPath 
+  : path.join(__dirname, '..', uploadPath);
+
 // Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log(`📁 Upload folder dibuat di: ${uploadsDir}`);
+} else {
+  console.log(`📁 Upload folder: ${uploadsDir}`);
 }
 
 // Configure storage

@@ -89,10 +89,25 @@ const Home = () => {
         {/* Hero Section */}
         <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-2xl p-8 border border-border shadow-custom">
           <div className="max-w-3xl">
+            <div className="flex items-center gap-4 mb-4">
+              <img
+                src="/LOGOK5.png"
+                alt="Logo SMKN 5 Malang"
+                className="h-14 w-14 rounded-md border border-border bg-white object-contain shadow-sm"
+              />
+              <div>
+                <p className="text-sm text-muted-foreground">Unit TKJ</p>
+                <p className="text-lg font-semibold text-foreground">
+                  SMKN 5 Malang
+                </p>
+              </div>
+            </div>
+
             <h2 className="text-3xl font-bold mb-3">Selamat Datang!</h2>
             <p className="text-lg text-muted-foreground mb-6">
-              Sistem peminjaman barang Unit TKJ. Pilih barang yang ingin
-              dipinjam atau kembalikan barang yang sudah selesai digunakan.
+              Sistem peminjaman barang Unit TKJ SMKN 5 Malang. Pilih barang
+              yang ingin dipinjam atau kembalikan barang yang sudah selesai
+              digunakan.
             </p>
 
             <div className="flex flex-wrap gap-6 items-center">

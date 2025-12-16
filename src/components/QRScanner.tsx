@@ -258,6 +258,18 @@ const QRScanner = ({
           </Button>
         </div>
 
+        <div className="bg-muted/60 border border-border rounded-lg p-3 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 text-primary mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              Arahkan QR ke kotak bercahaya di layar
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Pastikan kode berada di tengah frame dan stabil selama 1-2 detik. Scanner berhenti otomatis setelah berhasil.
+            </p>
+          </div>
+        </div>
+
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -267,6 +279,15 @@ const QRScanner = ({
 
         <div className="relative bg-muted rounded-lg overflow-hidden">
           <div id="qr-reader" className="w-full min-h-[300px]"></div>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="relative w-64 h-64 max-w-[80%] max-h-[80%]">
+              <div className="absolute inset-0 rounded-2xl border-2 border-primary/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
+              <div className="absolute inset-8 border border-dashed border-primary/50 rounded-xl" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-1 h-10 bg-primary/80 animate-pulse" />
+              </div>
+            </div>
+          </div>
           {!isScanning && (
             <div className="absolute inset-0 flex items-center justify-center bg-muted">
               <div className="text-center space-y-4">
