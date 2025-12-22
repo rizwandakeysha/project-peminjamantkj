@@ -23,8 +23,17 @@ const CameraCapture = ({
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string>("");
   const [useSignature, setUseSignature] = useState<boolean>(false);
+  const [mirrorPreview, setMirrorPreview] = useState<boolean>(true);
 
   useEffect(() => {
+    // On mobile devices, do not mirror the camera preview/capture
+    const isCoarse = window.matchMedia?.("(pointer: coarse)").matches;
+    const ua = navigator.userAgent.toLowerCase();
+    const isMobileUA = /android|iphone|ipad|ipod/.test(ua);
+    if (isCoarse || isMobileUA) {
+      setMirrorPreview(false);
+    }
+
     return () => {
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
@@ -86,11 +95,23 @@ const CameraCapture = ({
         canvas.height = size;
 
         context.save();
-        // Mirror horizontally to match preview
-        context.translate(size, 0);
-        context.scale(-1, 1);
+        if (mirrorPreview) {
+          // Mirror horizontally to match preview
+          context.translate(size, 0);
+          context.scale(-1, 1);
+        }
         // Draw centered square crop from video
-        context.drawImage(video, offsetX, offsetY, size, size, 0, 0, size, size);
+        context.drawImage(
+          video,
+          offsetX,
+          offsetY,
+          size,
+          size,
+          0,
+          0,
+          size,
+          size
+        );
         context.restore();
 
         const imageData = canvas.toDataURL("image/jpeg", 0.8);
@@ -148,14 +169,14 @@ const CameraCapture = ({
               <img
                 src={capturedImage}
                 alt="Captured"
-                className="w-full h-full object-cover"
+                className={`w-full h-full object-cover ${mirrorPreview ? "" : ""}`}
               />
             ) : (
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
-                className="w-full h-full object-cover transform -scale-x-100"
+                className={`w-full h-full object-cover ${mirrorPreview ? "transform -scale-x-100" : ""}`}
               />
             )}
 
