@@ -1058,13 +1058,12 @@ const BorrowFlow = () => {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Ambil foto yang jelas menampilkan wajah peminjam dan barang yang
-                dipinjam
+                Ambil foto yang jelas menampilkan barang yang dipinjam
               </AlertDescription>
             </Alert>
             <CameraCapture
               onCapture={handlePhotoCapture}
-              label="Foto Peminjam & Barang"
+              label="Foto Barang"
               isSubmitting={isSubmitting}
             />
             <Button

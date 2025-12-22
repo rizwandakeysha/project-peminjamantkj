@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Camera, RotateCcw, Check, AlertCircle } from "lucide-react";
+import { Camera, RotateCcw, AlertCircle, Zap, ZapOff } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import SignaturePad from "@/components/SignaturePad";
 
@@ -24,6 +24,7 @@ const CameraCapture = ({
   const [error, setError] = useState<string>("");
   const [useSignature, setUseSignature] = useState<boolean>(false);
   const [mirrorPreview, setMirrorPreview] = useState<boolean>(true);
+  const [flashEnabled, setFlashEnabled] = useState<boolean>(false);
 
   useEffect(() => {
     // On mobile devices, do not mirror the camera preview/capture
@@ -55,10 +56,16 @@ const CameraCapture = ({
         throw new Error("Camera API tidak tersedia pada perangkat ini");
       }
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        // Prefer rear/back camera on mobile; browsers may ignore if unavailable
+      const constraints: any = {
         video: { facingMode: { ideal: "environment" }, width: 640, height: 480 },
-      });
+      };
+
+      // Try to enable flash on mobile (Android/iOS)
+      if (flashEnabled) {
+        constraints.video.torch = true;
+      }
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -122,6 +129,9 @@ const CameraCapture = ({
           stream.getTracks().forEach((track) => track.stop());
           setIsStreaming(false);
         }
+
+        // Auto-confirm and capture immediately
+        onCapture(imageData);
       }
     }
   };
@@ -129,12 +139,6 @@ const CameraCapture = ({
   const retakePhoto = () => {
     setCapturedImage(null);
     startCamera();
-  };
-
-  const confirmPhoto = () => {
-    if (capturedImage) {
-      onCapture(capturedImage);
-    }
   };
 
   return (
@@ -181,6 +185,29 @@ const CameraCapture = ({
             )}
 
             <canvas ref={canvasRef} className="hidden" />
+
+            {/* Flash toggle button - only show on mobile when streaming */}
+            {isStreaming && !capturedImage && (
+              <button
+                onClick={() => {
+                  setFlashEnabled(!flashEnabled);
+                  // Restart camera with new flash setting
+                  if (stream) {
+                    stream.getTracks().forEach((track) => track.stop());
+                    setStream(null);
+                    startCamera();
+                  }
+                }}
+                className="absolute top-3 right-3 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full transition"
+                title={flashEnabled ? "Flash nyala" : "Flash mati"}
+              >
+                {flashEnabled ? (
+                  <Zap className="h-5 w-5" />
+                ) : (
+                  <ZapOff className="h-5 w-5" />
+                )}
+              </button>
+            )}
           </div>
         ) : (
           <SignaturePad
@@ -210,31 +237,21 @@ const CameraCapture = ({
           )}
 
           {capturedImage && (
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                onClick={retakePhoto}
-                variant="outline"
-                disabled={isSubmitting}
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Ulangi
-              </Button>
-              <Button
-                onClick={confirmPhoto}
-                className="bg-success hover:bg-success-light"
-                disabled={isSubmitting}
-              >
-                <Check className="h-4 w-4 mr-2" />
-                {isSubmitting ? "Sedang submit..." : "Gunakan"}
-              </Button>
-            </div>
+            <Button
+              onClick={retakePhoto}
+              variant="outline"
+              className="w-full"
+            >
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Ulangi
+            </Button>
           )}
         </div>
 
         <p className="text-xs text-muted-foreground text-center">
           {useSignature
             ? "Tanda tangan ini akan disimpan sebagai bukti peminjaman."
-            : "Pastikan wajah peminjam dan barang terlihat jelas"}
+            : "Pastikan barang terlihat jelas"}
         </p>
       </div>
     </Card>

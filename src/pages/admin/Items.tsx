@@ -34,7 +34,6 @@ import {
   Camera as CameraIcon,
   Upload as UploadIcon,
 } from "lucide-react";
-import { mockJenisBarang, mockBarang } from "@/lib/mockData";
 import {
   createSimpleLabelDataURL,
   downloadSimpleLabelPNG,
@@ -109,16 +108,14 @@ const Items = () => {
           created_at: j.created_at,
         }));
 
-        setJenisBarangList(
-          mappedJenis.length > 0 ? mappedJenis : mockJenisBarang
-        );
+        setJenisBarangList(mappedJenis);
         setBarangList(barangData);
       } catch (error) {
         console.error("Error fetching data:", error);
         toast.error("Gagal memuat data dari server");
-        // Fallback to mock data
-        setJenisBarangList(mockJenisBarang);
-        setBarangList(mockBarang);
+        // Do not use mock data; leave empty on error
+        setJenisBarangList([]);
+        setBarangList([]);
       } finally {
         setLoading(false);
       }
@@ -1949,7 +1946,21 @@ const Items = () => {
         {/* Add/Edit Barang Dialog */}
         <Dialog
           open={showAddBarangDialog}
-          onOpenChange={setShowAddBarangDialog}
+          onOpenChange={(open) => {
+            setShowAddBarangDialog(open);
+            // Reset form when closing dialog
+            if (!open) {
+              setBarangFormData({
+                nama_barang: "",
+                kode_barang: "",
+                no_serial_number: "",
+                deskripsi_barang: "",
+                status: "Tersedia",
+                foto_barang: "",
+              });
+              setEditingBarang(null);
+            }
+          }}
         >
           <DialogContent className="max-w-lg max-h-[90vh] flex flex-col">
             <DialogHeader>

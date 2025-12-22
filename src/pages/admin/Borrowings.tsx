@@ -30,14 +30,8 @@ import {
   ChevronsUpDown,
 } from "lucide-react";
 import { Borrowing } from "@/types";
-import {
-  mockDetailPeminjaman,
-  mockBarang,
-  mockJenisBarang,
-  mockBorrowingsExtended,
-} from "@/lib/mockData";
 import { formatDateTimeLocal, formatDateLocal } from "@/lib/formatters";
-import { peminjamanAPI, barangAPI } from "@/lib/api";
+import { peminjamanAPI } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import {
   Dialog,
@@ -163,14 +157,14 @@ const Borrowings = () => {
         // Store raw data for detail dialog and stats
         (window as any).__peminjamanData = data;
       } else {
-        // Fallback to mock
-        setBorrowings(mockBorrowingsExtended as any);
+        setBorrowings([]);
+        (window as any).__peminjamanData = [];
       }
     } catch (error) {
       console.error("Error fetching borrowings:", error);
       toast.error("Gagal memuat data peminjaman");
-      // Fallback to mock data
-      setBorrowings(mockBorrowingsExtended as any);
+      setBorrowings([]);
+      (window as any).__peminjamanData = [];
     } finally {
       setLoading(false);
     }

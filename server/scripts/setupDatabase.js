@@ -105,7 +105,9 @@ CREATE INDEX idx_tanggal_pinjam ON peminjaman(tanggal_pinjam);
 CREATE TABLE detail_peminjaman (
   id_detail_peminjaman SERIAL PRIMARY KEY,
   id_peminjaman INTEGER NOT NULL REFERENCES peminjaman(id_peminjaman) ON DELETE CASCADE,
-  id_barang INTEGER NOT NULL REFERENCES barang(id_barang),
+  id_barang INTEGER REFERENCES barang(id_barang) ON DELETE SET NULL,
+  kode_barang VARCHAR(50),
+  nama_barang VARCHAR(255),
   tanggal_kembali TIMESTAMP,
   foto_bukti_kembali TEXT,
   status VARCHAR(20) DEFAULT 'Dipinjam' CHECK (status IN ('Dipinjam', 'Dikembalikan', 'Rusak', 'Hilang')),

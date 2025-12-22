@@ -21,8 +21,8 @@ exports.getAllPeminjaman = async (req, res) => {
                json_build_object(
                  'id_detail_peminjaman', dp.id_detail_peminjaman,
                  'id_barang', dp.id_barang,
-                 'nama_barang', b.nama_barang,
-                 'kode_barang', b.kode_barang,
+                 'nama_barang', COALESCE(b.nama_barang, dp.nama_barang, '(Barang Dihapus)'),
+                 'kode_barang', COALESCE(b.kode_barang, dp.kode_barang, '-'),
                  'foto_barang', b.foto_barang,
                  'id_jenis_barang', jb.id_jenis_barang,
                  'nama_jenis_barang', jb.nama_jenis_barang,
@@ -75,8 +75,8 @@ exports.getPeminjamanByCode = async (req, res) => {
                 json_build_object(
                   'id_detail_peminjaman', dp.id_detail_peminjaman,
                   'id_barang', dp.id_barang,
-                  'nama_barang', b.nama_barang,
-                  'kode_barang', b.kode_barang,
+                  'nama_barang', COALESCE(b.nama_barang, dp.nama_barang, '(Barang Dihapus)'),
+                  'kode_barang', COALESCE(b.kode_barang, dp.kode_barang, '-'),
                   'foto_barang', b.foto_barang,
                   'id_jenis_barang', jb.id_jenis_barang,
                   'nama_jenis_barang', jb.nama_jenis_barang,
@@ -190,12 +190,24 @@ exports.createPeminjaman = async (req, res) => {
     // Create detail_peminjaman records for each item and update barang status
     const detailRecords = [];
     for (const item of items) {
-      // Insert detail_peminjaman
+      // Get barang details for snapshot (audit trail)
+      const barangData = await client.query(
+        'SELECT kode_barang, nama_barang FROM barang WHERE id_barang = $1',
+        [item.id_barang]
+      );
+      
+      if (barangData.rows.length === 0) {
+        throw new Error(`Barang dengan ID ${item.id_barang} tidak ditemukan`);
+      }
+
+      const { kode_barang, nama_barang } = barangData.rows[0];
+
+      // Insert detail_peminjaman with snapshot data
       const detailResult = await client.query(
         `INSERT INTO detail_peminjaman 
-         (id_peminjaman, id_barang, status) 
-         VALUES ($1, $2, $3) RETURNING id_detail_peminjaman`,
-        [id_peminjaman, item.id_barang, 'Dipinjam']
+         (id_peminjaman, id_barang, kode_barang, nama_barang, status) 
+         VALUES ($1, $2, $3, $4, $5) RETURNING id_detail_peminjaman`,
+        [id_peminjaman, item.id_barang, kode_barang, nama_barang, 'Dipinjam']
       );
 
       // Update barang status to 'Dipinjam'
