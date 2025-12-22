@@ -47,7 +47,8 @@ const CameraCapture = ({
       }
 
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 },
+        // Prefer rear/back camera on mobile; browsers may ignore if unavailable
+        video: { facingMode: { ideal: "environment" }, width: 640, height: 480 },
       });
 
       if (videoRef.current) {
