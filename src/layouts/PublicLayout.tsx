@@ -1,11 +1,42 @@
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { Calendar, Clock } from "lucide-react";
 
 interface PublicLayoutProps {
   children: ReactNode;
 }
 
 const PublicLayout = ({ children }: PublicLayoutProps) => {
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatDate = (date: Date) => {
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Oct', 'Nov', 'Des'];
+    
+    const dayName = days[date.getDay()];
+    const day = date.getDate();
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    
+    return `${dayName}, ${day} ${month} ${year}`;
+  };
+
+  const formatTime = (date: Date) => {
+    const hours = date.getHours().toString().padStart(2, '0');
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    const seconds = date.getSeconds().toString().padStart(2, '0');
+    
+    return `${hours}:${minutes}:${seconds}`;
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="bg-card border-b border-border shadow-sm sticky top-0 z-50">
@@ -19,11 +50,22 @@ const PublicLayout = ({ children }: PublicLayoutProps) => {
               />
               <div>
                 <h1 className="text-xl font-bold text-foreground">
-                  Peminjaman Barang
+                  SIMABAR: Smart Inventory
                 </h1>
-                <p className="text-sm text-muted-foreground">Unit TKJ</p>
+                <p className="text-sm text-muted-foreground">Sistem Manajemen Barang</p>
               </div>
             </Link>
+            
+            <div className="hidden md:flex flex-col items-end gap-1">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Calendar className="h-4 w-4 text-primary" />
+                <span>{formatDate(currentTime)}</span>
+              </div>
+              <div className="flex items-center gap-2 text-lg font-bold text-primary">
+                <Clock className="h-4 w-4" />
+                <span className="tabular-nums">{formatTime(currentTime)}</span>
+              </div>
+            </div>
           </div>
         </div>
       </header>

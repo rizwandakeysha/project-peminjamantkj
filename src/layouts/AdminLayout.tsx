@@ -44,9 +44,9 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
               />
               <div>
                 <h1 className="text-xl font-bold text-foreground">
-                  Admin Dashboard
+                  Dashboard Admin 
                 </h1>
-                <p className="text-sm text-muted-foreground">Unit TKJ</p>
+                <p className="text-sm text-muted-foreground">SIMABAR Smart Inventory</p>
               </div>
             </div>
 

@@ -96,6 +96,7 @@ const QRScanner = ({
           video.setAttribute("playsinline", "true");
           video.style.width = "100%";
           video.style.height = "auto";
+          video.style.transform = "scaleX(-1)";
           container.appendChild(video);
           videoElRef.current = video;
 
@@ -202,6 +203,16 @@ const QRScanner = ({
       scannerRef.current = html5QrCode;
       setIsScanning(true);
       setCameraPermission("granted");
+
+      // Mirror preview video element for consistency with camera capture
+      setTimeout(() => {
+        try {
+          const videoEl = document.querySelector("#qr-reader video") as HTMLVideoElement | null;
+          if (videoEl) videoEl.style.transform = "scaleX(-1)";
+        } catch (e) {
+          // ignore
+        }
+      }, 50);
     } catch (err: any) {
       console.error("Error starting scanner:", err);
 

@@ -20,6 +20,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import CameraCapture from "@/components/CameraCapture";
 import {
   Package,
   Edit2,
@@ -29,6 +31,8 @@ import {
   QrCode,
   Barcode,
   Download,
+  Camera as CameraIcon,
+  Upload as UploadIcon,
 } from "lucide-react";
 import { mockJenisBarang, mockBarang } from "@/lib/mockData";
 import {
@@ -2018,49 +2022,76 @@ const Items = () => {
               </div>
               <div>
                 <label className="text-sm font-medium">Foto Barang</label>
-                <div className="mt-1 space-y-2">
-                  {barangFormData.foto_barang && (
-                    <div className="relative">
-                      <img
-                        src={barangFormData.foto_barang}
-                        alt="Preview"
-                        className="w-full h-32 object-cover rounded-md border"
-                      />
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="absolute top-1 right-1"
-                        onClick={() =>
+                <div className="mt-1">
+                  <Tabs defaultValue="upload" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="upload" className="gap-2">
+                        <UploadIcon className="h-4 w-4" />
+                        Upload File
+                      </TabsTrigger>
+                      <TabsTrigger value="capture" className="gap-2">
+                        <CameraIcon className="h-4 w-4" />
+                        Ambil Foto
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="upload" className="space-y-2 mt-3">
+                      {barangFormData.foto_barang && (
+                        <div className="relative">
+                          <img
+                            src={barangFormData.foto_barang}
+                            alt="Preview"
+                            className="w-full h-32 object-cover rounded-md border"
+                          />
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="absolute top-1 right-1"
+                            onClick={() =>
+                              setBarangFormData({
+                                ...barangFormData,
+                                foto_barang: "",
+                              })
+                            }
+                          >
+                            Hapus
+                          </Button>
+                        </div>
+                      )}
+                      <div className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFotoUpload}
+                          className="hidden"
+                          id="foto-barang-input"
+                        />
+                        <label
+                          htmlFor="foto-barang-input"
+                          className="cursor-pointer block"
+                        >
+                          <div className="text-sm font-medium">
+                            Klik untuk upload atau drag & drop
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            JPG, PNG, GIF (Max 5MB)
+                          </div>
+                        </label>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="capture" className="mt-3">
+                      <CameraCapture
+                        label="Ambil Foto Barang"
+                        onCapture={(imageData) => {
                           setBarangFormData({
                             ...barangFormData,
-                            foto_barang: "",
-                          })
-                        }
-                      >
-                        Hapus
-                      </Button>
-                    </div>
-                  )}
-                  <div className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFotoUpload}
-                      className="hidden"
-                      id="foto-barang-input"
-                    />
-                    <label
-                      htmlFor="foto-barang-input"
-                      className="cursor-pointer block"
-                    >
-                      <div className="text-sm font-medium">
-                        Klik untuk upload atau drag & drop
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        JPG, PNG, GIF (Max 5MB)
-                      </div>
-                    </label>
-                  </div>
+                            foto_barang: imageData,
+                          });
+                        }}
+                      />
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </div>
               <div className="flex gap-2 justify-end">

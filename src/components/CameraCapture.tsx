@@ -74,9 +74,23 @@ const CameraCapture = ({
       const context = canvas.getContext("2d");
 
       if (context) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0);
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
+        const size = Math.min(videoWidth, videoHeight);
+        const offsetX = (videoWidth - size) / 2;
+        const offsetY = (videoHeight - size) / 2;
+
+        // Set canvas to 1:1 aspect ratio
+        canvas.width = size;
+        canvas.height = size;
+
+        context.save();
+        // Mirror horizontally to match preview
+        context.translate(size, 0);
+        context.scale(-1, 1);
+        // Draw centered square crop from video
+        context.drawImage(video, offsetX, offsetY, size, size, 0, 0, size, size);
+        context.restore();
 
         const imageData = canvas.toDataURL("image/jpeg", 0.8);
         setCapturedImage(imageData);
@@ -117,7 +131,7 @@ const CameraCapture = ({
         )}
 
         {!useSignature ? (
-          <div className="relative bg-muted rounded-lg overflow-hidden w-full">
+          <div className="relative bg-muted rounded-lg overflow-hidden w-full aspect-square max-w-md mx-auto">
             {!isStreaming && !capturedImage && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center space-y-4">
@@ -133,14 +147,14 @@ const CameraCapture = ({
               <img
                 src={capturedImage}
                 alt="Captured"
-                className="w-full h-[60vh] md:h-[70vh] object-cover"
+                className="w-full h-full object-cover"
               />
             ) : (
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
-                className="w-full h-[60vh] md:h-[70vh] object-cover"
+                className="w-full h-full object-cover transform -scale-x-100"
               />
             )}
 
