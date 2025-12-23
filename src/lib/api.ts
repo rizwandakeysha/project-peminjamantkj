@@ -2,9 +2,9 @@
 import { Item, Borrowing, BorrowingFormData } from "@/types";
 
 // FIXED: Better API URL handling
-const API_BASE_URL = 
+export const API_BASE_URL = 
   import.meta.env.VITE_API_URL || 
-  "https://tkj-peminjaman-server-production.up.railway.app/api";
+  "https://project-peminjamantkj.onrender.com/api";
 
 
 // Helper function for API calls

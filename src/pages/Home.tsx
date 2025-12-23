@@ -33,7 +33,13 @@ const Home = () => {
       try {
         setLoading(true);
         const data = await barangAPI.getAll();
-        setItems(data);
+        // Shuffle items so the order changes on each refresh
+        const shuffled = [...data];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        setItems(shuffled);
       } catch (error) {
         console.error("Error fetching items:", error);
         toast.error("Gagal memuat data barang");

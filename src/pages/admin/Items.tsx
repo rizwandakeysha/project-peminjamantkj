@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from "react";
 import AdminLayout from "@/layouts/AdminLayout";
-import { barangAPI, jenisBarangAPI } from "@/lib/api";
+import { barangAPI, jenisBarangAPI, API_BASE_URL } from "@/lib/api";
 import { uploadPhotoToTelegram, getPhotoUrl } from "@/lib/telegramUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -782,8 +782,7 @@ const Items = () => {
             }
             const photoFile = new File([u8arr], 'photo.jpg', { type: mime });
             
-            const apiUrl = import.meta.env.VITE_API_URL;
-            const uploadResult = await uploadPhotoToTelegram(photoFile, editingBarang.id_barang, apiUrl);
+            const uploadResult = await uploadPhotoToTelegram(photoFile, editingBarang.id_barang, API_BASE_URL);
             
             // Use the returned file_id
             fotoFileId = uploadResult.foto_barang;
@@ -805,6 +804,11 @@ const Items = () => {
             | "Rusak"
             | "Hilang",
         };
+        
+        // Include foto_barang if it was uploaded
+        if (fotoFileId && fotoFileId !== editingBarang.foto_barang) {
+          updatePayload.foto_barang = fotoFileId;
+        }
         
         console.log('Update payload:', updatePayload);
         console.log('Update payload JSON:', JSON.stringify(updatePayload, null, 2));
@@ -873,8 +877,7 @@ const Items = () => {
             }
             const photoFile = new File([u8arr], 'photo.jpg', { type: mime });
             
-            const apiUrl = import.meta.env.VITE_API_URL;
-            const uploadResult = await uploadPhotoToTelegram(photoFile, createdBarang.id_barang, apiUrl);
+            const uploadResult = await uploadPhotoToTelegram(photoFile, createdBarang.id_barang, API_BASE_URL);
             
             // Update the local object with file_id (DB already updated by telegramController)
             createdBarang.foto_barang = uploadResult.foto_barang;
@@ -1919,7 +1922,7 @@ const Items = () => {
                                         >
                                           {barang.foto_barang && (
                                             <img
-                                              src={getPhotoUrl(barang.foto_barang, import.meta.env.VITE_API_URL)}
+                                              src={getPhotoUrl(barang.foto_barang, API_BASE_URL)}
                                               alt={barang.nama_barang}
                                               className="w-24 h-24 object-cover rounded flex-shrink-0"
                                             />
@@ -2482,7 +2485,7 @@ const Items = () => {
                       {barangFormData.foto_barang && (
                         <div className="relative">
                           <img
-                            src={getPhotoUrl(barangFormData.foto_barang, import.meta.env.VITE_API_URL)}
+                            src={getPhotoUrl(barangFormData.foto_barang, API_BASE_URL)}
                             alt="Preview"
                             className="w-full h-32 object-cover rounded-md border"
                           />
@@ -2682,7 +2685,7 @@ const Items = () => {
                     />
                     {barang.foto_barang && (
                       <img
-                        src={getPhotoUrl(barang.foto_barang, import.meta.env.VITE_API_URL)}
+                        src={getPhotoUrl(barang.foto_barang, API_BASE_URL)}
                         alt={barang.nama_barang}
                         className="w-12 h-12 object-cover rounded"
                       />
@@ -2975,7 +2978,7 @@ const Items = () => {
                             />
                             {barang.foto_barang && (
                               <img
-                                src={getPhotoUrl(barang.foto_barang, import.meta.env.VITE_API_URL)}
+                                src={getPhotoUrl(barang.foto_barang, API_BASE_URL)}
                                 alt={barang.nama_barang}
                                 className="w-12 h-12 object-cover rounded"
                               />

@@ -12,12 +12,9 @@ import {
   Calendar,
   UserCheck,
 } from "lucide-react";
-import { barangAPI, peminjamanAPI, guruAPI, siswaAPI } from "@/lib/api";
+import { barangAPI, peminjamanAPI, guruAPI, siswaAPI, API_BASE_URL } from "@/lib/api";
 import { getPhotoUrl } from "@/lib/telegramUtils";
 import { toast } from "react-hot-toast";
-
-const API_URL = import.meta.env.VITE_API_URL || 
-  "https://tkj-peminjaman-server-production.up.railway.app/api";
 
 const Dashboard = () => {
   const [statistics, setStatistics] = useState({
@@ -365,7 +362,7 @@ const Dashboard = () => {
                     <div className="flex items-center gap-3">
                       {borrowing.foto_credential && (
                         <img
-                          src={getPhotoUrl(borrowing.foto_credential, API_URL)}
+                          src={getPhotoUrl(borrowing.foto_credential, API_BASE_URL)}
                           alt={borrowing.nama_peminjam}
                           className="w-10 h-10 rounded-full object-cover"
                         />

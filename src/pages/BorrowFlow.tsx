@@ -59,7 +59,7 @@ import {
   peminjamanAPI,
 } from "@/lib/api";
 
-const API_URL = import.meta.env.VITE_API_URL || 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 
   "https://tkj-peminjaman-server-production.up.railway.app/api";
 
 type Step = "scan" | "form" | "photo" | "summary";
@@ -407,7 +407,7 @@ const BorrowFlow = () => {
           const file = new File([blob], 'credential.jpg', { type: 'image/jpeg' });
           
           // Upload to Telegram and get file_id
-          fotoCredentialUrl = await uploadCredentialToTelegram(file, API_URL);
+          fotoCredentialUrl = await uploadCredentialToTelegram(file, API_BASE_URL);
           toast.success('Foto kredensial berhasil diupload ke Telegram');
         } catch (error) {
           console.error('Error uploading credential to Telegram:', error);
@@ -685,7 +685,7 @@ const BorrowFlow = () => {
                                 <div className="aspect-video relative bg-muted">
                                   {item.foto_barang ? (
                                     <img
-                                      src={getPhotoUrl(item.foto_barang, import.meta.env.VITE_API_URL)}
+                                      src={getPhotoUrl(item.foto_barang, API_BASE_URL)}
                                       alt={item.nama_barang}
                                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                     />
@@ -760,7 +760,7 @@ const BorrowFlow = () => {
                                   <div className="w-full">
                                     {detailItem.foto_barang ? (
                                       <img
-                                        src={getPhotoUrl(detailItem.foto_barang, import.meta.env.VITE_API_URL)}
+                                        src={getPhotoUrl(detailItem.foto_barang, API_BASE_URL)}
                                         alt={detailItem.nama_barang}
                                         className="w-full max-h-[60vh] object-contain rounded-md border"
                                       />
@@ -810,7 +810,7 @@ const BorrowFlow = () => {
                       <div className="flex items-center gap-3">
                         {selectedItem?.foto_barang && (
                           <img
-                            src={getPhotoUrl(selectedItem.foto_barang, import.meta.env.VITE_API_URL)}
+                            src={getPhotoUrl(selectedItem.foto_barang, API_BASE_URL)}
                             alt={selectedItem.nama_barang}
                             className="w-16 h-16 object-cover rounded"
                           />

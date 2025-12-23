@@ -11,11 +11,8 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Item, Borrowing } from "@/types";
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { barangAPI, peminjamanAPI } from "@/lib/api";
+import { barangAPI, peminjamanAPI, API_BASE_URL } from "@/lib/api";
 import { getPhotoUrl, uploadCredentialToTelegram } from "@/lib/telegramUtils";
-
-const API_URL = import.meta.env.VITE_API_URL || 
-  "https://tkj-peminjaman-server-production.up.railway.app/api";
 
 type Step = "scan" | "verify" | "complete";
 
@@ -326,7 +323,7 @@ const ReturnFlow = () => {
           const blob = await base64Response.blob();
           const file = new File([blob], 'return.jpg', { type: 'image/jpeg' });
           
-          fotoReturnUrl = await uploadCredentialToTelegram(file, API_URL);
+          fotoReturnUrl = await uploadCredentialToTelegram(file, API_BASE_URL);
           toast.success('Foto pengembalian berhasil diupload ke Telegram');
         } catch (error) {
           console.error('Error uploading return photo to Telegram:', error);
@@ -604,7 +601,7 @@ const ReturnFlow = () => {
                 <div className="flex items-start gap-4">
                   {foundItem.foto_barang && (
                     <img
-                      src={getPhotoUrl(foundItem.foto_barang, import.meta.env.VITE_API_URL)}
+                      src={getPhotoUrl(foundItem.foto_barang, API_BASE_URL)}
                       alt={foundItem.nama_barang}
                       className="h-24 w-24 object-cover rounded"
                     />
