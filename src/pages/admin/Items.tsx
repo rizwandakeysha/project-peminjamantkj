@@ -257,6 +257,8 @@ const Items = () => {
     foto_barang: "",
   });
 
+  const [isDragging, setIsDragging] = useState(false);
+
   // Get barang for selected jenis
   const getBarangForJenis = (jenisId: number) => {
     return barangList.filter((b) => b.id_jenis_barang === jenisId);
@@ -680,6 +682,63 @@ const Items = () => {
       setBarangFormData({ ...barangFormData, foto_barang: base64String });
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Only set isDragging to false if we're actually leaving the drop zone
+    // (not just moving over a child element)
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Ukuran file maksimal 5MB");
+        return;
+      }
+
+      // Validate file type
+      if (!file.type.startsWith("image/")) {
+        toast.error("File harus berupa gambar (JPG, PNG, GIF, dll)");
+        return;
+      }
+
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64String = event.target?.result as string;
+        setBarangFormData({ ...barangFormData, foto_barang: base64String });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // ===== BARANG HANDLERS =====
@@ -2353,7 +2412,17 @@ const Items = () => {
                           </Button>
                         </div>
                       )}
-                      <div className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-muted/50 transition">
+                      <div 
+                        className={`border-2 border-dashed rounded-md p-8 min-h-[120px] text-center cursor-pointer transition-all duration-200 flex items-center justify-center ${
+                          isDragging 
+                            ? "bg-primary/10 border-primary border-4 scale-105" 
+                            : "hover:bg-muted/50"
+                        }`}
+                        onDragOver={handleDragOver}
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                      >
                         <input
                           type="file"
                           accept="image/*"
@@ -2363,12 +2432,12 @@ const Items = () => {
                         />
                         <label
                           htmlFor="foto-barang-input"
-                          className="cursor-pointer block"
+                          className="cursor-pointer block w-full"
                         >
                           <div className="text-sm font-medium">
                             Klik untuk upload atau drag & drop
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-xs text-muted-foreground mt-1">
                             JPG, PNG, GIF (Max 5MB)
                           </div>
                         </label>
