@@ -1,12 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const upload = require('../config/multer');
-const supabaseUploadController = require('../controllers/supabaseUploadController');
+const uploadController = require('../controllers/uploadController');
 
-// POST upload image ke Supabase Storage
-router.post('/image', upload.single('image'), supabaseUploadController.uploadImage);
-
-// DELETE image dari Supabase Storage
-router.delete('/image/:filename', supabaseUploadController.deleteImage);
+// POST upload image
+router.post('/image', upload.single('image'), uploadController.handleUpload);
 
 module.exports = router;
