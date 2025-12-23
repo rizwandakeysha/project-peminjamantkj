@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { Borrowing } from "@/types";
 import { formatDateTimeLocal, formatDateLocal } from "@/lib/formatters";
+import { getPhotoUrl } from "@/lib/telegramUtils";
 import { peminjamanAPI } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import {
@@ -50,6 +51,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+const API_URL = import.meta.env.VITE_API_URL || 
+  "https://tkj-peminjaman-server-production.up.railway.app/api";
 
 const Borrowings = () => {
   const [borrowings, setBorrowings] = useState<Borrowing[]>([]);
@@ -948,7 +952,7 @@ const Borrowings = () => {
                           <div className="flex items-start gap-2">
                             {borrowing.foto_credential && (
                               <img
-                                src={borrowing.foto_credential}
+                                src={getPhotoUrl(borrowing.foto_credential, API_URL)}
                                 alt={borrowing.nama_peminjam}
                                 className="w-8 h-8 rounded-full object-cover aspect-square flex-shrink-0"
                               />
@@ -1221,7 +1225,7 @@ const Borrowings = () => {
                   <div>
                     <h4 className="font-semibold mb-3">Foto Credential</h4>
                     <img
-                      src={selectedBorrowing.foto_credential}
+                      src={getPhotoUrl(selectedBorrowing.foto_credential, API_URL)}
                       alt="Credential"
                       className="w-full rounded-lg border border-border"
                     />

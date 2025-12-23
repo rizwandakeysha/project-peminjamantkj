@@ -81,6 +81,56 @@ exports.uploadPhotoToTelegram = async (req, res) => {
   }
 };
 
+// Upload credential photo to Telegram and return file_id (without updating DB)
+exports.uploadCredentialToTelegram = async (req, res) => {
+  try {
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'File tidak ditemukan',
+      });
+    }
+
+    // Create FormData for Telegram API
+    const formData = new FormData();
+    formData.append('chat_id', TELEGRAM_CHAT_ID);
+    formData.append('photo', file.buffer, {
+      filename: file.originalname,
+      contentType: file.mimetype,
+    });
+
+    // Send to Telegram
+    const telegramResponse = await axios.post(
+      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`,
+      formData,
+      {
+        headers: formData.getHeaders(),
+      }
+    );
+
+    // Extract file_id from Telegram response
+    const photos = telegramResponse.data.result.photo;
+    const fileId = photos[photos.length - 1].file_id;
+
+    res.json({
+      success: true,
+      message: 'Foto credential berhasil diupload',
+      data: {
+        foto_credential: fileId,
+      },
+    });
+  } catch (error) {
+    console.error('Error uploading credential to Telegram:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error uploading foto credential',
+      error: error.message,
+    });
+  }
+};
+
 // Get photo from Telegram using file_id (proxy for permanent access)
 exports.getPhoto = async (req, res) => {
   try {

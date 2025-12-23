@@ -65,6 +65,43 @@ export async function uploadPhotoToTelegram(
 }
 
 /**
+ * Upload compressed credential photo to Telegram via backend
+ * Returns only file_id (no database update)
+ */
+export async function uploadCredentialToTelegram(
+  file: File,
+  apiUrl: string
+): Promise<string> {
+  try {
+    // Compress image first
+    const compressedFile = await compressImage(file);
+
+    // Create FormData for upload
+    const formData = new FormData();
+    formData.append('photo', compressedFile);
+
+    // Upload to backend Telegram endpoint
+    const response = await fetch(`${apiUrl}/telegram/upload-credential`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.message || 'Upload credential gagal');
+    }
+
+    toastFn.success('Foto kredensial berhasil diupload!');
+    return data.data.foto_credential;
+  } catch (error) {
+    console.error('Error uploading credential photo:', error);
+    toastFn.error('Error mengupload foto kredensial');
+    throw error;
+  }
+}
+
+/**
  * Build proxy URL for displaying Telegram photo
  * Images accessed through backend proxy for permanent access
  */

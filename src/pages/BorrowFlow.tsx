@@ -37,7 +37,7 @@ import {
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatStudentDisplay, formatTeacherDisplay } from "@/lib/formatters";
-import { getPhotoUrl } from "@/lib/telegramUtils";
+import { getPhotoUrl, uploadCredentialToTelegram } from "@/lib/telegramUtils";
 import { BorrowerLabel } from "@/components/BorrowerLabel";
 import {
   ArrowLeft,
@@ -58,6 +58,9 @@ import {
   siswaAPI,
   peminjamanAPI,
 } from "@/lib/api";
+
+const API_URL = import.meta.env.VITE_API_URL || 
+  "https://tkj-peminjaman-server-production.up.railway.app/api";
 
 type Step = "scan" | "form" | "photo" | "summary";
 
@@ -393,7 +396,25 @@ const BorrowFlow = () => {
       }
 
       // Use provided photoData or fallback to state
-      const fotoCredentialUrl = photoDataToSubmit || photoData || null;
+      let fotoCredentialUrl = photoDataToSubmit || photoData || null;
+
+      // If photoData is base64, upload to Telegram first
+      if (fotoCredentialUrl && fotoCredentialUrl.startsWith('data:')) {
+        try {
+          // Convert base64 to File
+          const base64Response = await fetch(fotoCredentialUrl);
+          const blob = await base64Response.blob();
+          const file = new File([blob], 'credential.jpg', { type: 'image/jpeg' });
+          
+          // Upload to Telegram and get file_id
+          fotoCredentialUrl = await uploadCredentialToTelegram(file, API_URL);
+          toast.success('Foto kredensial berhasil diupload ke Telegram');
+        } catch (error) {
+          console.error('Error uploading credential to Telegram:', error);
+          toast.error('Gagal upload foto kredensial, menggunakan data lokal');
+          // Continue with base64 if upload fails
+        }
+      }
 
       // Create peminjaman in database
       const result = await peminjamanAPI.create({
@@ -956,7 +977,7 @@ const BorrowFlow = () => {
                                     )
                                     .map((t) => (
                                       <CommandItem
-                                        key={t.nip}
+                                        key={t.id || t.nip}
                                         value={formatTeacherDisplay(t)}
                                         onSelect={(currentValue) => {
                                           setFormData({
@@ -999,7 +1020,7 @@ const BorrowFlow = () => {
                                     )
                                     .map((s) => (
                                       <CommandItem
-                                        key={s.nis}
+                                        key={s.id || s.nis}
                                         value={formatStudentDisplay(s)}
                                         onSelect={(currentValue) => {
                                           setFormData({
@@ -1118,7 +1139,7 @@ const BorrowFlow = () => {
                                 )
                                 .map((g) => (
                                   <CommandItem
-                                    key={g.nip}
+                                    key={g.id || g.nip}
                                     value={formatTeacherDisplay(g)}
                                     onSelect={(currentValue) => {
                                       setFormData({

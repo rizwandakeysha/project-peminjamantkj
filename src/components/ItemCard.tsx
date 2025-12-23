@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Package } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { getPhotoUrl } from "@/lib/telegramUtils";
 import {
   Dialog,
   DialogContent,
@@ -31,8 +32,8 @@ const ItemCard = ({ item, onBorrow }: ItemCardProps) => {
       ([entry]) => {
         if (entry.isIntersecting) {
           // Load image when it becomes visible
-          if (imageRef.current) {
-            imageRef.current.src = item.foto_barang!;
+          if (imageRef.current && item.foto_barang) {
+            imageRef.current.src = getPhotoUrl(item.foto_barang, import.meta.env.VITE_API_URL);
           }
           observer.unobserve(imageRef.current);
         }
@@ -159,7 +160,7 @@ const ItemCard = ({ item, onBorrow }: ItemCardProps) => {
               <div className="w-full">
                 {item.foto_barang ? (
                   <img
-                    src={item.foto_barang}
+                    src={getPhotoUrl(item.foto_barang, import.meta.env.VITE_API_URL)}
                     alt={item.nama_barang}
                     className="w-full max-h-[60vh] object-contain rounded-md border"
                   />
