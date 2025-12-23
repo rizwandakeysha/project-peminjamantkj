@@ -27,6 +27,7 @@ const CameraCapture = ({
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [error, setError] = useState<string>("");
   const [useSignature, setUseSignature] = useState<boolean>(false);
   const [mirrorPreview, setMirrorPreview] = useState<boolean>(true);
@@ -144,6 +145,7 @@ const CameraCapture = ({
 
   const retakePhoto = () => {
     setCapturedImage(null);
+    setHasSubmitted(false);
     startCamera();
   };
 
@@ -261,17 +263,22 @@ const CameraCapture = ({
                 <Button
                   onClick={retakePhoto}
                   variant="outline"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || hasSubmitted}
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Ulangi
                 </Button>
                 <Button
-                  onClick={() => capturedImage && onCapture(capturedImage)}
+                  onClick={() => {
+                    if (capturedImage && !hasSubmitted) {
+                      setHasSubmitted(true);
+                      onCapture(capturedImage);
+                    }
+                  }}
                   className="bg-success hover:bg-success-light"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || hasSubmitted}
                 >
-                  Gunakan
+                  {hasSubmitted ? "Terkirim" : "Gunakan"}
                 </Button>
               </div>
             )
