@@ -739,7 +739,7 @@ const Items = () => {
     }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
@@ -772,23 +772,29 @@ const Items = () => {
       }
 
       // For existing barang: upload directly to Telegram
-      setLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL;
-      const result = await uploadPhotoToTelegram(file, editingBarang.id_barang, apiUrl);
-      
-      setBarangFormData({ ...barangFormData, foto_barang: result.foto_barang });
-      
-      // Also update the barang list immediately
-      setBarangList(
-        barangList.map((b) =>
-          b.id_barang === editingBarang.id_barang
-            ? { ...b, foto_barang: result.foto_barang }
-            : b
-        )
-      );
-    } finally {
-      setLoading(false);
+      try {
+        setLoading(true);
+        const apiUrl = import.meta.env.VITE_API_URL;
+        const result = await uploadPhotoToTelegram(file, editingBarang.id_barang, apiUrl);
+        
+        setBarangFormData({ ...barangFormData, foto_barang: result.foto_barang });
+        
+        // Also update the barang list immediately
+        setBarangList(
+          barangList.map((b) =>
+            b.id_barang === editingBarang.id_barang
+              ? { ...b, foto_barang: result.foto_barang }
+              : b
+          )
+        );
+      } catch (error) {
+        console.error('Error uploading photo:', error);
+        toast.error('Gagal mengupload foto');
+      } finally {
+        setLoading(false);
+      }
     }
+  };
 
   // ===== BARANG HANDLERS =====
   const handleAddBarang = async () => {
@@ -801,10 +807,9 @@ const Items = () => {
       setLoading(true);
       if (editingBarang) {
         // Update barang via API - only send allowed fields
-        const updatePayload = {
+        const updatePayload: any = {
           nama_barang: barangFormData.nama_barang,
           deskripsi_barang: barangFormData.deskripsi_barang,
-          foto_barang: barangFormData.foto_barang,
           no_serial_number: barangFormData.no_serial_number,
           status: barangFormData.status as
             | "Dipinjam"
@@ -812,6 +817,15 @@ const Items = () => {
             | "Rusak"
             | "Hilang",
         };
+        
+        // Only include foto_barang if it's base64 (not yet uploaded to Telegram)
+        // If it's a file_id, it's already saved by uploadPhotoToTelegram
+        if (barangFormData.foto_barang && barangFormData.foto_barang.startsWith("data:")) {
+          updatePayload.foto_barang = barangFormData.foto_barang;
+        }
+        
+        console.log('Update payload:', updatePayload);
+        console.log('Current foto_barang:', barangFormData.foto_barang);
         
         await barangAPI.update(editingBarang.id_barang, updatePayload);
         setBarangList(
@@ -869,7 +883,7 @@ const Items = () => {
             const apiUrl = import.meta.env.VITE_API_URL;
             const uploadResult = await uploadPhotoToTelegram(photoFile, createdBarang.id_barang, apiUrl);
             
-            // Update the created barang with the file_id
+            // Update the local object with file_id (DB already updated by telegramController)
             createdBarang.foto_barang = uploadResult.foto_barang;
           } catch (error) {
             console.error('Error uploading photo to Telegram:', error);

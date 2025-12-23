@@ -1,5 +1,5 @@
 import imageCompression from 'browser-image-compression';
-import { toast } from '@/hooks/use-toast';
+import { toast as toastFn } from 'sonner';
 
 /**
  * Compress image before upload to Telegram
@@ -20,7 +20,7 @@ export async function compressImage(file: File): Promise<File> {
     return compressedFile;
   } catch (error) {
     console.error('Error compressing image:', error);
-    toast.error('Error mengompres gambar');
+    toastFn.error('Error mengompres gambar');
     throw error;
   }
 }
@@ -55,11 +55,11 @@ export async function uploadPhotoToTelegram(
       throw new Error(data.message || 'Upload gagal');
     }
 
-    toast.success('Foto berhasil diupload!');
+    toastFn.success('Foto berhasil diupload!');
     return data.data;
   } catch (error) {
     console.error('Error uploading photo:', error);
-    toast.error('Error mengupload foto');
+    toastFn.error('Error mengupload foto');
     throw error;
   }
 }
