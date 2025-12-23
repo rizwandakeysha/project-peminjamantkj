@@ -17,6 +17,7 @@ import {
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
+  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
@@ -43,32 +44,83 @@ import { toast } from "react-hot-toast";
 import JSZip from "jszip";
 
 // Helper function to generate kode_jenis_barang from nama (4 most representative letters with TKJ- prefix)
-const generateKodeJenis = (namaJenis: string): string => {
-  // Split by spaces and get first letter of each word
+const generateKodeJenis = (namaJenis: string, strategyNum: number = 0): string => {
+  // Split by spaces and get words
   const words = namaJenis.trim().split(/\s+/);
+  const letters = namaJenis.replace(/[^A-Za-z]/g, "").toUpperCase();
   let kode = "";
 
-  // Try to get 4 letters from first letters of words
-  for (const word of words) {
-    if (kode.length < 4 && word.length > 0) {
-      kode += word[0].toUpperCase();
+  if (strategyNum === 0) {
+    // Strategy 0: First letter of each word
+    for (const word of words) {
+      if (kode.length < 4 && word.length > 0) {
+        kode += word[0].toUpperCase();
+      }
+    }
+  } else if (strategyNum === 1) {
+    // Strategy 1: Use letters at different positions from whole name
+    // For example: positions 0, 1, 2, 3 or 0, 2, 4, 6 (skip every other)
+    const step = Math.floor(letters.length / 4);
+    for (let i = 0; i < 4 && i * step < letters.length; i++) {
+      kode += letters[i * step];
+    }
+  } else if (strategyNum === 2) {
+    // Strategy 2: Use middle/ending letters from each word if available
+    for (const word of words) {
+      if (kode.length < 4 && word.length > 1) {
+        kode += word[1].toUpperCase(); // second letter
+      }
+    }
+  } else if (strategyNum === 3) {
+    // Strategy 3: Use last letter of each word if available, else first
+    for (const word of words) {
+      if (kode.length < 4 && word.length > 0) {
+        kode += word[word.length - 1].toUpperCase();
+      }
     }
   }
 
-  // If still less than 4, use first 4 chars of the name
+  // Fallback: use first 4 letters from name
   if (kode.length < 4) {
-    kode = namaJenis
-      .replace(/[^A-Za-z]/g, "")
-      .substring(0, 4)
-      .toUpperCase();
+    kode = letters.substring(strategyNum, strategyNum + 4);
   }
 
   // Ensure exactly 4 characters
   if (kode.length > 4) {
     kode = kode.substring(0, 4);
+  } else if (kode.length < 4) {
+    kode = kode.padEnd(4, "X"); // Pad with X if still short
   }
 
   return `TKJ-${kode}`;
+};
+
+// Ensure kode_jenis unique by trying different 4-letter combinations instead of appending suffix
+const ensureUniqueKodeJenis = (
+  namaJenis: string,
+  existingCodes: string[]
+): string => {
+  // Try up to 4 different strategies to generate unique 4-letter codes
+  for (let strategy = 0; strategy < 4; strategy++) {
+    const candidate = generateKodeJenis(namaJenis, strategy);
+    if (!existingCodes.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Fallback: if all strategies collide, use letters with position offset
+  let counter = 1;
+  const letters = namaJenis.replace(/[^A-Za-z]/g, "").toUpperCase();
+  while (counter < letters.length - 3) {
+    const fallbackKode = `TKJ-${letters.substring(counter, counter + 4)}`;
+    if (!existingCodes.includes(fallbackKode)) {
+      return fallbackKode;
+    }
+    counter += 1;
+  }
+
+  // Last resort: return with random suffix (very unlikely to reach here)
+  return `TKJ-${letters.substring(0, 4).padEnd(4, "X")}-${Date.now() % 9999}`;
 };
 
 // Helper function to generate kode_barang from kode_jenis (AAAA-1, AAAA-2, etc)
@@ -146,6 +198,11 @@ const Items = () => {
   const [qrLabelName, setQrLabelName] = useState<string>("");
   const [qrJenisKode, setQrJenisKode] = useState<string>("");
   const [qrJenisNama, setQrJenisNama] = useState<string>("");
+  // Bulk delete states
+  const [showBulkDeleteJenisDialog, setShowBulkDeleteJenisDialog] = useState(false);
+  const [selectedJenisForDelete, setSelectedJenisForDelete] = useState<number[]>([]);
+  const [showBulkDeleteBarangDialog, setShowBulkDeleteBarangDialog] = useState(false);
+  const [selectedBarangForDelete, setSelectedBarangForDelete] = useState<number[]>([]);
   // barcode dialog states for barang
   const [barcodeDialogOpen, setBarcodeDialogOpen] = useState(false);
   const [barcodeDataUrl, setBarcodeDataUrl] = useState<string | null>(null);
@@ -167,9 +224,29 @@ const Items = () => {
 
   // Form states
   const [jenisFormData, setJenisFormData] = useState({
+    kode_jenis_barang: "",
     nama_jenis_barang: "",
     deskripsi_jenis_barang: "",
   });
+  const [jenisKodeDirty, setJenisKodeDirty] = useState(false);
+
+  // Auto-generate kode jenis saat mengetik nama (hanya tambah baru & kode belum diubah manual)
+  useEffect(() => {
+    if (!selectedJenisId && !jenisKodeDirty) {
+      if (jenisFormData.nama_jenis_barang.trim().length >= 1) {
+        const generated = ensureUniqueKodeJenis(
+          jenisFormData.nama_jenis_barang,
+          jenisBarangList
+            .map((j) => j.kode_jenis_barang?.toUpperCase())
+            .filter(Boolean)
+        );
+        setJenisFormData((prev) => ({ ...prev, kode_jenis_barang: generated }));
+      } else {
+        setJenisFormData((prev) => ({ ...prev, kode_jenis_barang: "" }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jenisFormData.nama_jenis_barang, selectedJenisId, jenisKodeDirty, jenisBarangList]);
 
   const [barangFormData, setBarangFormData] = useState({
     nama_barang: "",
@@ -407,9 +484,11 @@ const Items = () => {
   // ===== JENIS BARANG HANDLERS =====
   const handleEditJenis = (jenis: any) => {
     setJenisFormData({
+      kode_jenis_barang: jenis.kode_jenis_barang,
       nama_jenis_barang: jenis.nama_jenis_barang,
       deskripsi_jenis_barang: jenis.deskripsi_jenis_barang || "",
     });
+    setJenisKodeDirty(true);
     setSelectedJenisId(jenis.id_jenis_barang);
     setShowAddJenisDialog(true);
   };
@@ -422,27 +501,37 @@ const Items = () => {
 
     try {
       setLoading(true);
+
+      // Build desired kode (from form if filled, else auto-generate) and ensure uniqueness
+      const existingCodes = jenisBarangList
+        .filter((j) => j.id_jenis_barang !== selectedJenisId)
+        .map((j) => j.kode_jenis_barang?.toUpperCase())
+        .filter(Boolean) as string[];
+
+      const uniqueKode = ensureUniqueKodeJenis(
+        jenisFormData.nama_jenis_barang,
+        existingCodes
+      );
+
       if (selectedJenisId) {
         // Update jenis barang via API
         await jenisBarangAPI.update(selectedJenisId, {
+          kode_jenis: uniqueKode,
           nama_jenis: jenisFormData.nama_jenis_barang,
           deskripsi: jenisFormData.deskripsi_jenis_barang,
         });
         setJenisBarangList(
           jenisBarangList.map((j) =>
             j.id_jenis_barang === selectedJenisId
-              ? { ...j, ...jenisFormData }
+              ? { ...j, ...jenisFormData, kode_jenis_barang: uniqueKode }
               : j
           )
         );
         toast.success("Jenis barang berhasil diupdate!");
       } else {
-        // Create jenis barang via API with auto-generated kode
-        const generatedKode = generateKodeJenis(
-          jenisFormData.nama_jenis_barang
-        );
+        // Create jenis barang via API with unique auto-generated kode
         const newJenis = await jenisBarangAPI.create({
-          kode_jenis: generatedKode,
+          kode_jenis: uniqueKode,
           nama_jenis: jenisFormData.nama_jenis_barang,
           deskripsi: jenisFormData.deskripsi_jenis_barang,
         });
@@ -450,7 +539,7 @@ const Items = () => {
         // Map response to local format
         const mappedJenis = {
           id_jenis_barang: newJenis.id,
-          kode_jenis_barang: newJenis.kode_jenis || generatedKode,
+          kode_jenis_barang: newJenis.kode_jenis || uniqueKode,
           nama_jenis_barang:
             newJenis.nama_jenis || jenisFormData.nama_jenis_barang,
           deskripsi_jenis_barang:
@@ -471,11 +560,12 @@ const Items = () => {
     }
 
     setShowAddJenisDialog(false);
-    setJenisFormData({ nama_jenis_barang: "", deskripsi_jenis_barang: "" });
-    setSelectedJenisId(null);
-
-    setShowAddJenisDialog(false);
-    setJenisFormData({ nama_jenis_barang: "", deskripsi_jenis_barang: "" });
+    setJenisKodeDirty(false);
+    setJenisFormData({
+      kode_jenis_barang: "",
+      nama_jenis_barang: "",
+      deskripsi_jenis_barang: "",
+    });
     setSelectedJenisId(null);
   };
 
@@ -492,6 +582,77 @@ const Items = () => {
     } catch (error) {
       console.error("Error deleting jenis barang:", error);
       toast.error("Gagal menghapus jenis barang");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDeleteJenis = async () => {
+    if (selectedJenisForDelete.length === 0) {
+      toast.error("Pilih minimal satu jenis barang untuk dihapus");
+      return;
+    }
+    try {
+      setLoading(true);
+      let successCount = 0;
+      for (const id of selectedJenisForDelete) {
+        try {
+          await jenisBarangAPI.delete(id);
+          successCount++;
+        } catch (err) {
+          console.error("Error deleting jenis:", err);
+        }
+      }
+      // Refresh data
+      setJenisBarangList(
+        jenisBarangList.filter(
+          (j) => !selectedJenisForDelete.includes(j.id_jenis_barang)
+        )
+      );
+      setBarangList(
+        barangList.filter(
+          (b) => !selectedJenisForDelete.includes(b.id_jenis_barang || 0)
+        )
+      );
+      toast.success(`Berhasil menghapus ${successCount} jenis barang`);
+      setShowBulkDeleteJenisDialog(false);
+      setSelectedJenisForDelete([]);
+    } catch (error) {
+      console.error("Error bulk deleting jenis:", error);
+      toast.error("Gagal menghapus jenis barang");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDeleteBarang = async () => {
+    if (selectedBarangForDelete.length === 0) {
+      toast.error("Pilih minimal satu barang untuk dihapus");
+      return;
+    }
+    try {
+      setLoading(true);
+      let successCount = 0;
+      for (const id of selectedBarangForDelete) {
+        try {
+          await barangAPI.delete(id);
+          successCount++;
+        } catch (err) {
+          console.error("Error deleting barang:", err);
+        }
+      }
+      // Refresh data
+      setBarangList(
+        barangList.filter(
+          (b) => !selectedBarangForDelete.includes(b.id_barang || b.id)
+        )
+      );
+      toast.success(`Berhasil menghapus ${successCount} barang`);
+      setShowBulkDeleteBarangDialog(false);
+      setSelectedBarangForDelete([]);
+    } catch (error) {
+      console.error("Error bulk deleting barang:", error);
+      toast.error("Gagal menghapus barang");
     } finally {
       setLoading(false);
     }
@@ -996,6 +1157,74 @@ const Items = () => {
     }
   };
 
+  const csvEscape = (value: any) => {
+    if (value === undefined || value === null) return "";
+    const str = String(value).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const exportJenisBarangCsv = () => {
+    if (jenisBarangList.length === 0) {
+      toast.error("Tidak ada jenis barang untuk diexport");
+      return;
+    }
+
+    const jenisMap = new Map(
+      jenisBarangList.map((j) => [j.id_jenis_barang, j])
+    );
+
+    const header =
+      "jenis_barang,deskripsi_jenis,nama_barang,no_serial_number,deskripsi_barang,status";
+
+    const barangRows = barangList.map((b) => {
+      const jenisKey =
+        (b as any).id_jenis_barang ?? (b as any).id_jenis ?? null;
+      const jenis = (jenisKey ? jenisMap.get(jenisKey) : undefined) || {};
+
+      return [
+        csvEscape(jenis.nama_jenis_barang || ""),
+        csvEscape(jenis.deskripsi_jenis_barang || ""),
+        csvEscape(b.nama_barang || ""),
+        csvEscape(b.no_serial_number || ""),
+        csvEscape(b.deskripsi_barang || ""),
+        csvEscape(b.status || ""),
+      ].join(",");
+    });
+
+    const jenisDenganBarang = new Set<number>();
+    barangList.forEach((b) => {
+      const key = (b as any).id_jenis_barang ?? (b as any).id_jenis;
+      if (typeof key === "number") jenisDenganBarang.add(key);
+    });
+
+    const jenisTanpaBarang = jenisBarangList
+      .filter((j) => !jenisDenganBarang.has(j.id_jenis_barang))
+      .map((j) =>
+        [
+          csvEscape(j.nama_jenis_barang || ""),
+          csvEscape(j.deskripsi_jenis_barang || ""),
+          csvEscape(""),
+          csvEscape(""),
+          csvEscape(""),
+          csvEscape(""),
+        ].join(",")
+      );
+
+    const rows = [...barangRows, ...jenisTanpaBarang];
+
+    const csvContent = [header, ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "export-jenis-barang.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`Berhasil export ${rows.length} baris CSV`);
+  };
+
   if (loading) {
     return (
       <AdminLayout>
@@ -1039,6 +1268,29 @@ const Items = () => {
             >
               <Download className="h-4 w-4" />
               Download QR Jenis (ZIP)
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setSelectedJenisForDelete([]);
+                setShowBulkDeleteJenisDialog(true);
+              }}
+              disabled={jenisBarangList.length === 0}
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Hapus Semua Jenis
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportJenisBarangCsv}
+              disabled={barangList.length === 0}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export CSV 
             </Button>
             <Dialog
               open={showImportJenisBarangDialog}
@@ -1126,7 +1378,9 @@ const Items = () => {
                 <Button
                   onClick={() => {
                     setSelectedJenisId(null);
+                    setJenisKodeDirty(false);
                     setJenisFormData({
+                      kode_jenis_barang: "",
                       nama_jenis_barang: "",
                       deskripsi_jenis_barang: "",
                     });
@@ -1146,6 +1400,23 @@ const Items = () => {
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium">
+                      Kode Jenis Barang
+                    </label>
+                    <Input
+                      placeholder="TKJ-XXXX"
+                      value={jenisFormData.kode_jenis_barang}
+                      onChange={(e) => {
+                        setJenisKodeDirty(true);
+                        setJenisFormData({
+                          ...jenisFormData,
+                          kode_jenis_barang: e.target.value.toUpperCase(),
+                        });
+                      }}
+                      className="mt-1"
+                    />
+                  </div>
                   <div>
                     <label className="text-sm font-medium">
                       Nama Jenis Barang
@@ -1353,6 +1624,19 @@ const Items = () => {
                                     {getJenisName(selectedJenisId || 0)}
                                   </DialogTitle>
                                   <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      onClick={() => {
+                                        setSelectedBarangForDelete([]);
+                                        setShowBulkDeleteBarangDialog(true);
+                                      }}
+                                      className="gap-2"
+                                      disabled={getBarangForJenis(selectedJenisId || 0).length === 0}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      Hapus Semua
+                                    </Button>
                                     <Button
                                       size="sm"
                                       variant="secondary"
@@ -2094,6 +2378,9 @@ const Items = () => {
                     <TabsContent value="capture" className="mt-3">
                       <CameraCapture
                         label="Ambil Foto Barang"
+                        enableFlashToggle
+                        autoConfirm
+                        cropSquare
                         onCapture={(imageData) => {
                           setBarangFormData({
                             ...barangFormData,
@@ -2367,6 +2654,212 @@ const Items = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Bulk Delete Jenis Dialog */}
+        <AlertDialog open={showBulkDeleteJenisDialog} onOpenChange={setShowBulkDeleteJenisDialog}>
+          <AlertDialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Hapus Semua Jenis Barang</AlertDialogTitle>
+              <AlertDialogDescription>
+                Pilih jenis barang yang ingin dihapus. Semua barang dalam jenis tersebut juga akan ikut terhapus.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="select-all-delete-jenis"
+                    checked={selectedJenisForDelete.length === jenisBarangList.length && jenisBarangList.length > 0}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedJenisForDelete(jenisBarangList.map(j => j.id_jenis_barang));
+                      } else {
+                        setSelectedJenisForDelete([]);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="select-all-delete-jenis" className="font-semibold cursor-pointer">
+                    Pilih Semua ({jenisBarangList.length} jenis barang)
+                  </label>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {selectedJenisForDelete.length} terpilih
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {jenisBarangList.map((jenis) => {
+                  const itemCount = barangList.filter(
+                    (b) => b.id_jenis_barang === jenis.id_jenis_barang
+                  ).length;
+                  const isSelected = selectedJenisForDelete.includes(jenis.id_jenis_barang);
+                  
+                  return (
+                    <div
+                      key={jenis.id_jenis_barang}
+                      className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
+                        isSelected ? 'bg-destructive/10 border-destructive' : ''
+                      }`}
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedJenisForDelete(selectedJenisForDelete.filter(id => id !== jenis.id_jenis_barang));
+                        } else {
+                          setSelectedJenisForDelete([...selectedJenisForDelete, jenis.id_jenis_barang]);
+                        }
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <code className="bg-muted px-2 py-1 rounded text-xs font-semibold text-primary">
+                            {jenis.kode_jenis_barang}
+                          </code>
+                          <span className="font-medium">{jenis.nama_jenis_barang}</span>
+                        </div>
+                        {jenis.deskripsi_jenis_barang && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {jenis.deskripsi_jenis_barang}
+                          </div>
+                        )}
+                      </div>
+                      <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                        {itemCount} item
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleBulkDeleteJenis}
+                disabled={selectedJenisForDelete.length === 0}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                Hapus {selectedJenisForDelete.length} Jenis
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Bulk Delete Barang Dialog */}
+        <AlertDialog open={showBulkDeleteBarangDialog} onOpenChange={setShowBulkDeleteBarangDialog}>
+          <AlertDialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Hapus Semua Barang</AlertDialogTitle>
+              <AlertDialogDescription>
+                Pilih barang yang ingin dihapus dari jenis {getJenisName(selectedJenisId || 0)}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-4 py-4">
+              {selectedJenisId && (() => {
+                const barangForJenis = getBarangForJenis(selectedJenisId);
+                return (
+                  <>
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="select-all-delete-barang"
+                          checked={selectedBarangForDelete.length === barangForJenis.length && barangForJenis.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedBarangForDelete(barangForJenis.map(b => b.id_barang || b.id));
+                            } else {
+                              setSelectedBarangForDelete([]);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <label htmlFor="select-all-delete-barang" className="font-semibold cursor-pointer">
+                          Pilih Semua ({barangForJenis.length} barang)
+                        </label>
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        {selectedBarangForDelete.length} terpilih
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                      {barangForJenis.map((barang) => {
+                        const barangId = barang.id_barang || barang.id;
+                        const isSelected = selectedBarangForDelete.includes(barangId);
+                        
+                        return (
+                          <div
+                            key={barangId}
+                            className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
+                              isSelected ? 'bg-destructive/10 border-destructive' : ''
+                            }`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedBarangForDelete(selectedBarangForDelete.filter(id => id !== barangId));
+                              } else {
+                                setSelectedBarangForDelete([...selectedBarangForDelete, barangId]);
+                              }
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            {barang.foto_barang && (
+                              <img
+                                src={barang.foto_barang}
+                                alt={barang.nama_barang}
+                                className="w-12 h-12 object-cover rounded"
+                              />
+                            )}
+                            <div className="flex-1">
+                              <div className="font-medium">{barang.nama_barang}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {barang.kode_barang}
+                                {barang.no_serial_number && ` • SN: ${barang.no_serial_number}`}
+                              </div>
+                            </div>
+                            <span
+                              className={`inline-flex items-center justify-center px-3 py-1 text-xs font-semibold rounded-full ${
+                                barang.status === "Tersedia"
+                                  ? "bg-green-100 text-green-700"
+                                  : barang.status === "Dipinjam"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {barang.status}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleBulkDeleteBarang}
+                disabled={selectedBarangForDelete.length === 0}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                Hapus {selectedBarangForDelete.length} Barang
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AdminLayout>
   );

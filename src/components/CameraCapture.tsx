@@ -9,12 +9,18 @@ interface CameraCaptureProps {
   onCapture: (imageData: string) => void;
   label?: string;
   isSubmitting?: boolean;
+  enableFlashToggle?: boolean; // show flash toggle (only for add barang)
+  autoConfirm?: boolean; // auto-call onCapture after shot (only for add barang)
+  cropSquare?: boolean; // crop to 1:1 square (only for add barang)
 }
 
 const CameraCapture = ({
   onCapture,
   label = "Ambil Foto",
   isSubmitting = false,
+  enableFlashToggle = false,
+  autoConfirm = false,
+  cropSquare = false,
 }: CameraCaptureProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -60,8 +66,8 @@ const CameraCapture = ({
         video: { facingMode: { ideal: "environment" }, width: 640, height: 480 },
       };
 
-      // Try to enable flash on mobile (Android/iOS)
-      if (flashEnabled) {
+      // Try to enable flash when allowed (only if toggle enabled)
+      if (enableFlashToggle && flashEnabled) {
         constraints.video.torch = true;
       }
 
@@ -93,45 +99,45 @@ const CameraCapture = ({
       if (context) {
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
-        const size = Math.min(videoWidth, videoHeight);
-        const offsetX = (videoWidth - size) / 2;
-        const offsetY = (videoHeight - size) / 2;
 
-        // Set canvas to 1:1 aspect ratio
-        canvas.width = size;
-        canvas.height = size;
-
-        context.save();
-        if (mirrorPreview) {
-          // Mirror horizontally to match preview
-          context.translate(size, 0);
-          context.scale(-1, 1);
+        if (cropSquare) {
+          const size = Math.min(videoWidth, videoHeight);
+          const offsetX = (videoWidth - size) / 2;
+          const offsetY = (videoHeight - size) / 2;
+          canvas.width = size;
+          canvas.height = size;
+          context.save();
+          if (mirrorPreview) {
+            context.translate(size, 0);
+            context.scale(-1, 1);
+          }
+          context.drawImage(video, offsetX, offsetY, size, size, 0, 0, size, size);
+          context.restore();
+        } else {
+          // Keep original aspect ratio
+          canvas.width = videoWidth;
+          canvas.height = videoHeight;
+          context.save();
+          if (mirrorPreview) {
+            context.translate(videoWidth, 0);
+            context.scale(-1, 1);
+          }
+          context.drawImage(video, 0, 0, videoWidth, videoHeight);
+          context.restore();
         }
-        // Draw centered square crop from video
-        context.drawImage(
-          video,
-          offsetX,
-          offsetY,
-          size,
-          size,
-          0,
-          0,
-          size,
-          size
-        );
-        context.restore();
 
         const imageData = canvas.toDataURL("image/jpeg", 0.8);
         setCapturedImage(imageData);
+
+        if (autoConfirm) {
+          onCapture(imageData);
+        }
 
         // Stop camera after capture
         if (stream) {
           stream.getTracks().forEach((track) => track.stop());
           setIsStreaming(false);
         }
-
-        // Auto-confirm and capture immediately
-        onCapture(imageData);
       }
     }
   };
@@ -157,7 +163,11 @@ const CameraCapture = ({
         )}
 
         {!useSignature ? (
-          <div className="relative bg-muted rounded-lg overflow-hidden w-full aspect-square max-w-md mx-auto">
+          <div
+            className={`relative bg-muted rounded-lg overflow-hidden w-full ${
+              cropSquare ? "aspect-square max-w-md" : "aspect-video max-w-3xl"
+            } mx-auto`}
+          >
             {!isStreaming && !capturedImage && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="text-center space-y-4">
@@ -186,8 +196,8 @@ const CameraCapture = ({
 
             <canvas ref={canvasRef} className="hidden" />
 
-            {/* Flash toggle button - only show on mobile when streaming */}
-            {isStreaming && !capturedImage && (
+            {/* Flash toggle button - only for flows that need it (add barang) */}
+            {enableFlashToggle && isStreaming && !capturedImage && (
               <button
                 onClick={() => {
                   setFlashEnabled(!flashEnabled);
@@ -237,14 +247,34 @@ const CameraCapture = ({
           )}
 
           {capturedImage && (
-            <Button
-              onClick={retakePhoto}
-              variant="outline"
-              className="w-full"
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Ulangi
-            </Button>
+            autoConfirm ? (
+              <Button
+                onClick={retakePhoto}
+                variant="outline"
+                className="w-full"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Ulangi
+              </Button>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={retakePhoto}
+                  variant="outline"
+                  disabled={isSubmitting}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Ulangi
+                </Button>
+                <Button
+                  onClick={() => capturedImage && onCapture(capturedImage)}
+                  className="bg-success hover:bg-success-light"
+                  disabled={isSubmitting}
+                >
+                  Gunakan
+                </Button>
+              </div>
+            )
           )}
         </div>
 

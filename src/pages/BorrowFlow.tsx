@@ -4,10 +4,18 @@ import PublicLayout from "@/layouts/PublicLayout";
 import QRScanner from "@/components/QRScanner";
 import CameraCapture from "@/components/CameraCapture";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -119,6 +127,7 @@ const BorrowFlow = () => {
   // Photo step state
   const [photoData, setPhotoData] = useState<string>("");
   const [signatureData, setSignatureData] = useState<string>("");
+  const [detailItem, setDetailItem] = useState<BarangData | null>(null);
 
   // Popover states
   const [openRolePicker, setOpenRolePicker] = useState(false);
@@ -617,49 +626,163 @@ const BorrowFlow = () => {
                   <div className="bg-accent/50 p-4 rounded-lg mb-4">
                     {availableItems.length > 0 ? (
                       <div>
-                        <p className="font-semibold">
-                          Jenis: {selectedJenisCode}
-                        </p>
-                        <p className="text-sm text-muted-foreground mb-3">
-                          Pilih barang dari daftar
-                        </p>
-                        <div className="mt-3 grid gap-2">
-                          {availableItems.map((item) => (
-                            <label
-                              key={item.id}
-                              className="flex items-center gap-3 p-2 rounded border cursor-pointer hover:bg-accent"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedItemIds.includes(item.id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setSelectedItemIds((s) => [...s, item.id]);
-                                  } else {
-                                    setSelectedItemIds((s) =>
-                                      s.filter((id) => id !== item.id)
-                                    );
-                                  }
-                                }}
-                              />
-                              {item.foto_barang && (
-                                <img
-                                  src={item.foto_barang}
-                                  alt={item.nama_barang}
-                                  className="w-12 h-12 object-cover rounded"
-                                />
-                              )}
-                              <div className="flex-1">
-                                <div className="font-medium">
-                                  {item.nama_barang}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  Kode: {item.kode_barang}
-                                </div>
-                              </div>
-                            </label>
-                          ))}
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="font-semibold">Jenis: {selectedJenisCode}</p>
+                            <p className="text-sm text-muted-foreground">Pilih barang dari daftar</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">Dipilih: {selectedItemIds.length}</Badge>
+                            {selectedItemIds.length > 0 && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setSelectedItemIds([])}
+                              >
+                                Bersihkan Pilihan
+                              </Button>
+                            )}
+                          </div>
                         </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-3">
+                          {availableItems.map((item) => {
+                            const isSelected = selectedItemIds.includes(item.id);
+                            return (
+                              <div
+                                key={item.id}
+                                className={`relative group rounded-xl border overflow-hidden bg-card hover:shadow-lg transition-shadow ${
+                                  isSelected ? "ring-2 ring-primary border-primary/30" : ""
+                                }`}
+                              >
+                                <div
+                                  className="absolute z-10 top-2 left-2 bg-white/80 backdrop-blur px-2 py-1 rounded-md text-xs font-medium border"
+                                >
+                                  {item.kode_barang}
+                                </div>
+                                <div className="aspect-video relative bg-muted">
+                                  {item.foto_barang ? (
+                                    <img
+                                      src={item.foto_barang}
+                                      alt={item.nama_barang}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-muted-foreground/40 text-sm">
+                                      Tidak ada foto
+                                    </div>
+                                  )}
+                                  {isSelected && (
+                                    <div className="absolute inset-0 bg-primary/10" />
+                                  )}
+                                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+                                  <div className="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="backdrop-blur bg-white/80"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDetailItem(item);
+                                      }}
+                                    >
+                                      Detail
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="flex-1"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedItemIds((prev) =>
+                                          prev.includes(item.id)
+                                            ? prev.filter((id) => id !== item.id)
+                                            : [...prev, item.id]
+                                        );
+                                      }}
+                                    >
+                                      {isSelected ? "Batalkan" : "Pilih"}
+                                    </Button>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedItemIds((prev) =>
+                                      prev.includes(item.id)
+                                        ? prev.filter((id) => id !== item.id)
+                                        : [...prev, item.id]
+                                    )
+                                  }
+                                  className="w-full text-left p-3"
+                                >
+                                  <div className="font-medium line-clamp-1">{item.nama_barang}</div>
+                                  <div className="text-xs text-muted-foreground">{item.nama_jenis || "-"}</div>
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Detail Dialog */}
+                        <Dialog open={!!detailItem} onOpenChange={(open) => !open && setDetailItem(null)}>
+                          <DialogContent className="max-w-2xl">
+                            {detailItem && (
+                              <>
+                                <DialogHeader>
+                                  <DialogTitle className="line-clamp-2">{detailItem.nama_barang}</DialogTitle>
+                                  <DialogDescription>Kode: {detailItem.kode_barang}</DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-4">
+                                  <div className="w-full">
+                                    {detailItem.foto_barang ? (
+                                      <img
+                                        src={detailItem.foto_barang}
+                                        alt={detailItem.nama_barang}
+                                        className="w-full max-h-[60vh] object-contain rounded-md border"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-64 flex items-center justify-center bg-muted rounded-md border">
+                                        <span className="text-muted-foreground">Tidak ada foto</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Status</span>
+                                      <span className="font-medium">{detailItem.status}</span>
+                                    </div>
+                                    {detailItem.nama_jenis && (
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Jenis</span>
+                                        <span className="font-medium">{detailItem.nama_jenis}</span>
+                                      </div>
+                                    )}
+                                    {detailItem.kode_jenis && (
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Kode Jenis</span>
+                                        <span className="font-medium">{detailItem.kode_jenis}</span>
+                                      </div>
+                                    )}
+                                    {detailItem.no_serial_number && (
+                                      <div className="flex justify-between">
+                                        <span className="text-muted-foreground">No. Seri</span>
+                                        <span className="font-medium font-mono">{detailItem.no_serial_number}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {detailItem.deskripsi_barang && (
+                                    <div className="text-sm">
+                                      <span className="text-muted-foreground block">Deskripsi</span>
+                                      <p className="mt-1">{detailItem.deskripsi_barang}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </DialogContent>
+                        </Dialog>
                       </div>
                     ) : (
                       <div className="flex items-center gap-3">

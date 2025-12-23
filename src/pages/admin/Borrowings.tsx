@@ -137,6 +137,13 @@ const Borrowings = () => {
       if (data && Array.isArray(data) && data.length > 0) {
         // Transform structure: keep only peminjaman header, detail_peminjaman stored separately
         data.forEach((pmj: any) => {
+          const detailList = (pmj.detail_peminjaman || []).map((d: any) => ({
+            ...d,
+            nama_barang: d?.nama_barang || "(Barang dihapus)",
+            kode_barang: d?.kode_barang || "-",
+          }));
+
+          const firstDetail = detailList[0];
           borrowingsData.push({
             id: pmj.id_peminjaman,
             kode_peminjaman: pmj.kode_peminjaman,
@@ -149,8 +156,11 @@ const Borrowings = () => {
             tanggal_kembali: pmj.tanggal_kembali || null,
             status: pmj.status_transaksi, // Use transaction status
             created_at: pmj.created_at,
+            // Derived for search/sort convenience
+            nama_barang: firstDetail?.nama_barang || "",
+            kode_barang: firstDetail?.kode_barang || "",
             // Keep detail_peminjaman for detail dialog
-            detail_peminjaman: pmj.detail_peminjaman || [],
+            detail_peminjaman: detailList,
           });
         });
         setBorrowings(borrowingsData);
@@ -1109,7 +1119,7 @@ const Borrowings = () => {
                                 </code>
                               </td>
                               <td className="px-4 py-2">
-                                {detail.nama_barang || "-"}
+                                {detail.nama_barang || "(Barang dihapus)"}
                               </td>
                               <td className="px-4 py-2 text-center">1</td>
                               <td className="px-4 py-2">

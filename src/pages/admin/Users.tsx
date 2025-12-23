@@ -36,6 +36,7 @@ import {
   Plus,
   Edit,
   Trash2,
+  Download,
   Users as UsersIcon,
   GraduationCap,
 } from "lucide-react";
@@ -58,6 +59,11 @@ const Users = () => {
   const [importSiswaDialogOpen, setImportSiswaDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Bulk delete states
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [bulkDeleteType, setBulkDeleteType] = useState<"all" | "guru" | "siswa">("all");
+  const [selectedForDelete, setSelectedForDelete] = useState<number[]>([]);
 
   // Data states
   const [guru, setGuru] = useState<any[]>([]);
@@ -145,6 +151,59 @@ const Users = () => {
       setItemToDelete(null);
     } catch (error) {
       console.error("Error deleting:", error);
+      toast.error("Gagal menghapus data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedForDelete.length === 0) {
+      toast.error("Pilih minimal satu item untuk dihapus");
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      let successCount = 0;
+      
+      if (bulkDeleteType === "all" || bulkDeleteType === "guru") {
+        const guruToDelete = bulkDeleteType === "all" 
+          ? selectedForDelete.filter(id => guru.some(g => g.id === id))
+          : selectedForDelete;
+          
+        for (const id of guruToDelete) {
+          try {
+            await guruAPI.delete(id);
+            successCount++;
+          } catch (err) {
+            console.error("Error deleting guru:", err);
+          }
+        }
+        setGuru(guru.filter(g => !guruToDelete.includes(g.id)));
+      }
+      
+      if (bulkDeleteType === "all" || bulkDeleteType === "siswa") {
+        const siswaToDelete = bulkDeleteType === "all"
+          ? selectedForDelete.filter(id => siswa.some(s => s.id === id))
+          : selectedForDelete;
+          
+        for (const id of siswaToDelete) {
+          try {
+            await siswaAPI.delete(id);
+            successCount++;
+          } catch (err) {
+            console.error("Error deleting siswa:", err);
+          }
+        }
+        setSiswa(siswa.filter(s => !siswaToDelete.includes(s.id)));
+      }
+      
+      toast.success(`Berhasil menghapus ${successCount} pengguna`);
+      setShowBulkDeleteDialog(false);
+      setSelectedForDelete([]);
+    } catch (error) {
+      console.error("Error bulk deleting:", error);
       toast.error("Gagal menghapus data");
     } finally {
       setLoading(false);
@@ -340,6 +399,60 @@ const Users = () => {
     }
   };
 
+  const csvEscape = (value: any) => {
+    if (value === undefined || value === null) return "";
+    const str = String(value).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const exportGuruCsv = () => {
+    if (guru.length === 0) {
+      toast.error("Tidak ada data guru untuk diexport");
+      return;
+    }
+
+    const header = "nip,name";
+    const rows = guru.map((g) =>
+      [csvEscape(g.nip || ""), csvEscape(g.name || "")].join(",")
+    );
+
+    const csvContent = [header, ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "export-guru.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`Berhasil export ${rows.length} data guru`);
+  };
+
+  const exportSiswaCsv = () => {
+    if (siswa.length === 0) {
+      toast.error("Tidak ada data siswa untuk diexport");
+      return;
+    }
+
+    const header = "nis,name,kelas";
+    const rows = siswa.map((s) =>
+      [csvEscape(s.nis || ""), csvEscape(s.name || ""), csvEscape(s.kelas || "")].join(",")
+    );
+
+    const csvContent = [header, ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "export-siswa.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success(`Berhasil export ${rows.length} data siswa`);
+  };
+
   const handleEdit = async () => {
     if (!editingItem) return;
     try {
@@ -494,21 +607,86 @@ const Users = () => {
                     className="pl-10"
                   />
                 </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedForDelete([]);
+                    setBulkDeleteType("all");
+                    setShowBulkDeleteDialog(true);
+                  }}
+                  disabled={guru.length === 0 && siswa.length === 0}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Hapus Semua
+                </Button>
                 {activeTab === "guru" && (
                   <Button
                     variant="outline"
-                    onClick={() => setImportGuruDialogOpen(true)}
+                    size="sm"
+                    onClick={exportGuruCsv}
+                    disabled={guru.length === 0}
                   >
-                    Import CSV Guru
+                    <Download className="h-4 w-4 mr-2" />
+                    Export CSV Guru
                   </Button>
                 )}
                 {activeTab === "siswa" && (
                   <Button
                     variant="outline"
-                    onClick={() => setImportSiswaDialogOpen(true)}
+                    size="sm"
+                    onClick={exportSiswaCsv}
+                    disabled={siswa.length === 0}
                   >
-                    Import CSV Siswa
+                    <Download className="h-4 w-4 mr-2" />
+                    Export CSV Siswa
                   </Button>
+                )}
+                {activeTab === "guru" && (
+                  <>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedForDelete([]);
+                        setBulkDeleteType("guru");
+                        setShowBulkDeleteDialog(true);
+                      }}
+                      disabled={guru.length === 0}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Hapus Semua Guru
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setImportGuruDialogOpen(true)}
+                    >
+                      Import CSV Guru
+                    </Button>
+                  </>
+                )}
+                {activeTab === "siswa" && (
+                  <>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedForDelete([]);
+                        setBulkDeleteType("siswa");
+                        setShowBulkDeleteDialog(true);
+                      }}
+                      disabled={siswa.length === 0}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Hapus Semua Siswa
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setImportSiswaDialogOpen(true)}
+                    >
+                      Import CSV Siswa
+                    </Button>
+                  </>
                 )}
                 <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
                   <DialogTrigger asChild>
@@ -1065,6 +1243,152 @@ const Users = () => {
                 className="bg-destructive hover:bg-destructive/90"
               >
                 Hapus
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Bulk Delete Dialog */}
+        <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+          <AlertDialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Hapus {bulkDeleteType === "all" ? "Semua Pengguna" : bulkDeleteType === "guru" ? "Semua Guru" : "Semua Siswa"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                Pilih {bulkDeleteType === "all" ? "guru dan siswa" : bulkDeleteType === "guru" ? "guru" : "siswa"} yang ingin dihapus. Tindakan ini tidak dapat dibatalkan.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-4 py-4">
+              {(bulkDeleteType === "all" || bulkDeleteType === "guru") && guru.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="select-all-guru"
+                        checked={guru.every(g => selectedForDelete.includes(g.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedForDelete([...new Set([...selectedForDelete, ...guru.map(g => g.id)])]);
+                          } else {
+                            setSelectedForDelete(selectedForDelete.filter(id => !guru.some(g => g.id === id)));
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <label htmlFor="select-all-guru" className="font-semibold cursor-pointer">
+                        Pilih Semua Guru ({guru.length})
+                      </label>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-[30vh] overflow-y-auto">
+                    {guru.map((g) => {
+                      const isSelected = selectedForDelete.includes(g.id);
+                      return (
+                        <div
+                          key={g.id}
+                          className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
+                            isSelected ? 'bg-destructive/10 border-destructive' : ''
+                          }`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedForDelete(selectedForDelete.filter(id => id !== g.id));
+                            } else {
+                              setSelectedForDelete([...selectedForDelete, g.id]);
+                            }
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium">{g.name}</div>
+                            <div className="text-xs text-muted-foreground">NIP: {g.nip}</div>
+                          </div>
+                          <Badge variant="secondary">Guru</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {(bulkDeleteType === "all" || bulkDeleteType === "siswa") && siswa.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="select-all-siswa"
+                        checked={siswa.every(s => selectedForDelete.includes(s.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedForDelete([...new Set([...selectedForDelete, ...siswa.map(s => s.id)])]);
+                          } else {
+                            setSelectedForDelete(selectedForDelete.filter(id => !siswa.some(s => s.id === id)));
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <label htmlFor="select-all-siswa" className="font-semibold cursor-pointer">
+                        Pilih Semua Siswa ({siswa.length})
+                      </label>
+                    </div>
+                  </div>
+                  <div className="space-y-2 max-h-[30vh] overflow-y-auto">
+                    {siswa.map((s) => {
+                      const isSelected = selectedForDelete.includes(s.id);
+                      return (
+                        <div
+                          key={s.id}
+                          className={`flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors ${
+                            isSelected ? 'bg-destructive/10 border-destructive' : ''
+                          }`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedForDelete(selectedForDelete.filter(id => id !== s.id));
+                            } else {
+                              setSelectedForDelete([...selectedForDelete, s.id]);
+                            }
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium">{s.name}</div>
+                            <div className="text-xs text-muted-foreground">NIS: {s.nis} • Kelas: {s.kelas}</div>
+                          </div>
+                          <Badge>Siswa</Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg">
+                <span className="font-semibold">Total Terpilih</span>
+                <span className="text-lg font-bold">{selectedForDelete.length}</span>
+              </div>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Batal</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleBulkDelete}
+                disabled={selectedForDelete.length === 0}
+                className="bg-destructive hover:bg-destructive/90"
+              >
+                Hapus {selectedForDelete.length} Pengguna
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
