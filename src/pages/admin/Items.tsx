@@ -705,6 +705,11 @@ const Items = () => {
             : b
         )
       );
+      
+      // Close dialog since foto is already saved
+      setShowBarangDialog(false);
+      setEditingBarang(null);
+      toast.success("Foto berhasil diupload dan disimpan!");
     } catch (error) {
       console.error("Error uploading foto:", error);
       toast.error("Gagal mengupload foto");
@@ -787,6 +792,11 @@ const Items = () => {
               : b
           )
         );
+        
+        // Close dialog since foto is already saved
+        setShowBarangDialog(false);
+        setEditingBarang(null);
+        toast.success("Foto berhasil diupload dan disimpan!");
       } catch (error) {
         console.error('Error uploading photo:', error);
         toast.error('Gagal mengupload foto');
@@ -825,9 +835,21 @@ const Items = () => {
         }
         
         console.log('Update payload:', updatePayload);
+        console.log('Update payload JSON:', JSON.stringify(updatePayload, null, 2));
         console.log('Current foto_barang:', barangFormData.foto_barang);
         
-        await barangAPI.update(editingBarang.id_barang, updatePayload);
+        // Try to update, but if foto was already saved by Telegram and no other fields changed,
+        // backend might return error - that's okay, we'll catch it
+        try {
+          await barangAPI.update(editingBarang.id_barang, updatePayload);
+        } catch (updateError: any) {
+          console.error('Update error:', updateError);
+          // If it's "No valid fields to update", foto already saved via Telegram, continue
+          if (!updateError.message?.includes("No valid fields")) {
+            throw updateError; // Re-throw if it's a real error
+          }
+        }
+        
         setBarangList(
           barangList.map((b) =>
             b.id_barang === editingBarang.id_barang
@@ -1926,7 +1948,7 @@ const Items = () => {
                                         >
                                           {barang.foto_barang && (
                                             <img
-                                              src={barang.foto_barang}
+                                              src={getPhotoUrl(barang.foto_barang, import.meta.env.VITE_API_URL)}
                                               alt={barang.nama_barang}
                                               className="w-24 h-24 object-cover rounded flex-shrink-0"
                                             />
@@ -2689,7 +2711,7 @@ const Items = () => {
                     />
                     {barang.foto_barang && (
                       <img
-                        src={barang.foto_barang}
+                        src={getPhotoUrl(barang.foto_barang, import.meta.env.VITE_API_URL)}
                         alt={barang.nama_barang}
                         className="w-12 h-12 object-cover rounded"
                       />
@@ -2982,7 +3004,7 @@ const Items = () => {
                             />
                             {barang.foto_barang && (
                               <img
-                                src={barang.foto_barang}
+                                src={getPhotoUrl(barang.foto_barang, import.meta.env.VITE_API_URL)}
                                 alt={barang.nama_barang}
                                 className="w-12 h-12 object-cover rounded"
                               />
