@@ -1109,6 +1109,7 @@ const Borrowings = () => {
                           <th className="px-4 py-2 text-center font-semibold">Jumlah</th>
                           <th className="px-4 py-2 text-left font-semibold">Status</th>
                           <th className="px-4 py-2 text-left font-semibold">Tgl Kembali</th>
+                          <th className="px-4 py-2 text-center font-semibold">Foto Return</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1151,11 +1152,43 @@ const Borrowings = () => {
                                   ? formatDateLocal(detail.tanggal_kembali)
                                   : "-"}
                               </td>
+                              <td className="px-4 py-2 text-center">
+                                {detail.foto_bukti_kembali && detail.status === "Dikembalikan" ? (
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <button className="inline-block hover:opacity-80 transition-opacity">
+                                        <img
+                                          src={getPhotoUrl(detail.foto_bukti_kembali, API_URL)}
+                                          alt={`Return ${detail.nama_barang}`}
+                                          className="w-10 h-10 rounded object-cover border border-border cursor-pointer"
+                                        />
+                                      </button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-2xl">
+                                      <DialogHeader>
+                                        <DialogTitle>Foto Pengembalian - {detail.nama_barang}</DialogTitle>
+                                      </DialogHeader>
+                                      <div className="space-y-2">
+                                        <img
+                                          src={getPhotoUrl(detail.foto_bukti_kembali, API_URL)}
+                                          alt={`Return ${detail.nama_barang}`}
+                                          className="w-full rounded-lg border border-border"
+                                        />
+                                        <p className="text-sm text-muted-foreground text-center">
+                                          Dikembalikan: {formatDateLocal(detail.tanggal_kembali)}
+                                        </p>
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">-</span>
+                                )}
+                              </td>
                             </tr>
                           ))
                         ) : (
                           <tr>
-                            <td colSpan={5} className="px-4 py-3 text-center text-muted-foreground">
+                            <td colSpan={6} className="px-4 py-3 text-center text-muted-foreground">
                               Tidak ada data barang
                             </td>
                           </tr>

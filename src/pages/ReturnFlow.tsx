@@ -12,7 +12,10 @@ import { Item, Borrowing } from "@/types";
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { barangAPI, peminjamanAPI } from "@/lib/api";
-import { getPhotoUrl } from "@/lib/telegramUtils";
+import { getPhotoUrl, uploadCredentialToTelegram } from "@/lib/telegramUtils";
+
+const API_URL = import.meta.env.VITE_API_URL || 
+  "https://tkj-peminjaman-server-production.up.railway.app/api";
 
 type Step = "scan" | "verify" | "complete";
 
@@ -315,13 +318,30 @@ const ReturnFlow = () => {
         hasImageData: !!imageData,
       });
 
+      // Upload foto return ke Telegram jika base64
+      let fotoReturnUrl = imageData;
+      if (imageData && imageData.startsWith('data:')) {
+        try {
+          const base64Response = await fetch(imageData);
+          const blob = await base64Response.blob();
+          const file = new File([blob], 'return.jpg', { type: 'image/jpeg' });
+          
+          fotoReturnUrl = await uploadCredentialToTelegram(file, API_URL);
+          toast.success('Foto pengembalian berhasil diupload ke Telegram');
+        } catch (error) {
+          console.error('Error uploading return photo to Telegram:', error);
+          toast.error('Gagal upload foto pengembalian, menggunakan data lokal');
+          // Continue with base64 if upload fails
+        }
+      }
+
       // Update detail_peminjaman and peminjaman status via backend
       if (foundPeminjaman && foundItem && foundItem.id_detail_peminjaman) {
         console.log("📤 Calling peminjamanAPI.return()...");
         await peminjamanAPI.return(
           foundPeminjaman.kode_peminjaman,
           foundItem.id_detail_peminjaman,
-          imageData
+          fotoReturnUrl
         );
         console.log("✅ peminjamanAPI.return() success!");
       } else {
