@@ -141,6 +141,7 @@ const Items = () => {
   const [jenisBarangList, setJenisBarangList] = useState<any[]>([]);
   const [barangList, setBarangList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingBarang, setSavingBarang] = useState(false);
 
   // Fetch data from API on component mount
   useEffect(() => {
@@ -678,43 +679,21 @@ const Items = () => {
     }
 
     try {
-      setLoading(true);
+      setSavingBarang(true);
       
-      // For new barang: just store file temporarily, will upload when barang is created
-      if (!editingBarang) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const base64String = e.target?.result as string;
-          setBarangFormData({ ...barangFormData, foto_barang: base64String });
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-
-      // For existing barang: upload directly to Telegram
-      const apiUrl = import.meta.env.VITE_API_URL;
-      const result = await uploadPhotoToTelegram(file, editingBarang.id_barang, apiUrl);
-      
-      setBarangFormData({ ...barangFormData, foto_barang: result.foto_barang });
-      
-      // Also update the barang list immediately
-      setBarangList(
-        barangList.map((b) =>
-          b.id_barang === editingBarang.id_barang
-            ? { ...b, foto_barang: result.foto_barang }
-            : b
-        )
-      );
-      
-      // Close dialog since foto is already saved
-      setShowBarangDialog(false);
-      setEditingBarang(null);
-      toast.success("Foto berhasil diupload dan disimpan!");
+      // For both new and existing barang: just store base64 for preview
+      // Upload to Telegram will happen when user clicks Save
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64String = e.target?.result as string;
+        setBarangFormData({ ...barangFormData, foto_barang: base64String });
+      };
+      reader.readAsDataURL(file);
     } catch (error) {
       console.error("Error uploading foto:", error);
       toast.error("Gagal mengupload foto");
     } finally {
-      setLoading(false);
+      setSavingBarang(false);
     }
   };
 
@@ -765,44 +744,14 @@ const Items = () => {
         return;
       }
 
-      // For new barang: just store file temporarily
-      if (!editingBarang) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const base64String = event.target?.result as string;
-          setBarangFormData({ ...barangFormData, foto_barang: base64String });
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-
-      // For existing barang: upload directly to Telegram
-      try {
-        setLoading(true);
-        const apiUrl = import.meta.env.VITE_API_URL;
-        const result = await uploadPhotoToTelegram(file, editingBarang.id_barang, apiUrl);
-        
-        setBarangFormData({ ...barangFormData, foto_barang: result.foto_barang });
-        
-        // Also update the barang list immediately
-        setBarangList(
-          barangList.map((b) =>
-            b.id_barang === editingBarang.id_barang
-              ? { ...b, foto_barang: result.foto_barang }
-              : b
-          )
-        );
-        
-        // Close dialog since foto is already saved
-        setShowBarangDialog(false);
-        setEditingBarang(null);
-        toast.success("Foto berhasil diupload dan disimpan!");
-      } catch (error) {
-        console.error('Error uploading photo:', error);
-        toast.error('Gagal mengupload foto');
-      } finally {
-        setLoading(false);
-      }
+      // For both new and existing barang: just store base64 for preview
+      // Upload to Telegram will happen when user clicks Save
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64String = event.target?.result as string;
+        setBarangFormData({ ...barangFormData, foto_barang: base64String });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -814,8 +763,37 @@ const Items = () => {
     }
 
     try {
-      setLoading(true);
+      setSavingBarang(true);
       if (editingBarang) {
+        // If foto is base64 (new upload), upload to Telegram first
+        let fotoFileId = barangFormData.foto_barang;
+        
+        if (barangFormData.foto_barang && barangFormData.foto_barang.startsWith("data:")) {
+          try {
+            // Convert base64 to File
+            const base64String = barangFormData.foto_barang;
+            const arr = base64String.split(',');
+            const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+            const bstr = atob(arr[1]);
+            const n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            for (let i = 0; i < n; i++) {
+              u8arr[i] = bstr.charCodeAt(i);
+            }
+            const photoFile = new File([u8arr], 'photo.jpg', { type: mime });
+            
+            const apiUrl = import.meta.env.VITE_API_URL;
+            const uploadResult = await uploadPhotoToTelegram(photoFile, editingBarang.id_barang, apiUrl);
+            
+            // Use the returned file_id
+            fotoFileId = uploadResult.foto_barang;
+          } catch (error) {
+            console.error('Error uploading photo to Telegram:', error);
+            toast.error('Gagal mengupload foto');
+            // Continue with update without foto
+          }
+        }
+        
         // Update barang via API - only send allowed fields
         const updatePayload: any = {
           nama_barang: barangFormData.nama_barang,
@@ -828,23 +806,16 @@ const Items = () => {
             | "Hilang",
         };
         
-        // Only include foto_barang if it's base64 (not yet uploaded to Telegram)
-        // If it's a file_id, it's already saved by uploadPhotoToTelegram
-        if (barangFormData.foto_barang && barangFormData.foto_barang.startsWith("data:")) {
-          updatePayload.foto_barang = barangFormData.foto_barang;
-        }
-        
         console.log('Update payload:', updatePayload);
         console.log('Update payload JSON:', JSON.stringify(updatePayload, null, 2));
-        console.log('Current foto_barang:', barangFormData.foto_barang);
+        console.log('Current foto_barang:', fotoFileId);
         
-        // Try to update, but if foto was already saved by Telegram and no other fields changed,
-        // backend might return error - that's okay, we'll catch it
+        // Try to update other fields (foto already updated by uploadPhotoToTelegram if it was base64)
         try {
           await barangAPI.update(editingBarang.id_barang, updatePayload);
         } catch (updateError: any) {
           console.error('Update error:', updateError);
-          // If it's "No valid fields to update", foto already saved via Telegram, continue
+          // If it's "No valid fields to update", that's okay
           if (!updateError.message?.includes("No valid fields")) {
             throw updateError; // Re-throw if it's a real error
           }
@@ -853,7 +824,7 @@ const Items = () => {
         setBarangList(
           barangList.map((b) =>
             b.id_barang === editingBarang.id_barang
-              ? { ...b, ...barangFormData }
+              ? { ...b, ...barangFormData, foto_barang: fotoFileId }
               : b
           )
         );
@@ -920,7 +891,7 @@ const Items = () => {
       console.error("Error saving barang:", error);
       toast.error("Gagal menyimpan barang");
     } finally {
-      setLoading(false);
+      setSavingBarang(false);
     }
 
     setShowAddBarangDialog(false);
@@ -2589,8 +2560,8 @@ const Items = () => {
                 >
                   Batal
                 </Button>
-                <Button onClick={handleAddBarang}>
-                  {editingBarang ? "Update" : "Tambah"}
+                <Button onClick={handleAddBarang} disabled={savingBarang}>
+                  {savingBarang ? "Menyimpan..." : (editingBarang ? "Update" : "Tambah")}
                 </Button>
               </div>
             </div>
