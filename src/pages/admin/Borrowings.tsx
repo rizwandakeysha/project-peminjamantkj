@@ -73,6 +73,12 @@ const Borrowings = () => {
     null
   );
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [photoPreviewOpen, setPhotoPreviewOpen] = useState(false);
+  const [photoPreviewData, setPhotoPreviewData] = useState<{
+    url: string;
+    nama_barang: string;
+    tanggal_kembali: string;
+  } | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -1154,32 +1160,23 @@ const Borrowings = () => {
                               </td>
                               <td className="px-4 py-2 text-center">
                                 {detail.foto_bukti_kembali && detail.status === "Dikembalikan" ? (
-                                  <Dialog>
-                                    <DialogTrigger asChild>
-                                      <button className="inline-block hover:opacity-80 transition-opacity">
-                                        <img
-                                          src={getPhotoUrl(detail.foto_bukti_kembali, API_URL)}
-                                          alt={`Return ${detail.nama_barang}`}
-                                          className="w-10 h-10 rounded object-cover border border-border cursor-pointer"
-                                        />
-                                      </button>
-                                    </DialogTrigger>
-                                    <DialogContent className="max-w-2xl">
-                                      <DialogHeader>
-                                        <DialogTitle>Foto Pengembalian - {detail.nama_barang}</DialogTitle>
-                                      </DialogHeader>
-                                      <div className="space-y-2">
-                                        <img
-                                          src={getPhotoUrl(detail.foto_bukti_kembali, API_URL)}
-                                          alt={`Return ${detail.nama_barang}`}
-                                          className="w-full rounded-lg border border-border"
-                                        />
-                                        <p className="text-sm text-muted-foreground text-center">
-                                          Dikembalikan: {formatDateLocal(detail.tanggal_kembali)}
-                                        </p>
-                                      </div>
-                                    </DialogContent>
-                                  </Dialog>
+                                  <button 
+                                    className="inline-block hover:opacity-80 transition-opacity"
+                                    onClick={() => {
+                                      setPhotoPreviewData({
+                                        url: detail.foto_bukti_kembali,
+                                        nama_barang: detail.nama_barang || "Barang",
+                                        tanggal_kembali: detail.tanggal_kembali
+                                      });
+                                      setPhotoPreviewOpen(true);
+                                    }}
+                                  >
+                                    <img
+                                      src={getPhotoUrl(detail.foto_bukti_kembali, API_URL)}
+                                      alt={`Return ${detail.nama_barang}`}
+                                      className="w-10 h-10 rounded object-cover border border-border cursor-pointer"
+                                    />
+                                  </button>
                                 ) : (
                                   <span className="text-muted-foreground text-xs">-</span>
                                 )}
@@ -1273,6 +1270,35 @@ const Borrowings = () => {
                 </Button>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Photo Preview Dialog */}
+        <Dialog open={photoPreviewOpen} onOpenChange={setPhotoPreviewOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                Foto Pengembalian - {photoPreviewData?.nama_barang}
+              </DialogTitle>
+            </DialogHeader>
+            {photoPreviewData && (
+              <div className="space-y-2">
+                <img
+                  src={getPhotoUrl(photoPreviewData.url, API_URL)}
+                  alt={`Return ${photoPreviewData.nama_barang}`}
+                  className="w-full rounded-lg border border-border"
+                />
+                <p className="text-sm text-muted-foreground text-center">
+                  Dikembalikan: {formatDateLocal(photoPreviewData.tanggal_kembali)}
+                </p>
+              </div>
+            )}
+            <Button
+              onClick={() => setPhotoPreviewOpen(false)}
+              className="w-full"
+            >
+              Tutup
+            </Button>
           </DialogContent>
         </Dialog>
 
