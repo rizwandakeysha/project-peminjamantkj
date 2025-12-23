@@ -37,6 +37,7 @@ import {
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatStudentDisplay, formatTeacherDisplay } from "@/lib/formatters";
+import { getPhotoUrl } from "@/lib/telegramUtils";
 import { BorrowerLabel } from "@/components/BorrowerLabel";
 import {
   ArrowLeft,
@@ -663,7 +664,7 @@ const BorrowFlow = () => {
                                 <div className="aspect-video relative bg-muted">
                                   {item.foto_barang ? (
                                     <img
-                                      src={item.foto_barang}
+                                      src={getPhotoUrl(item.foto_barang, import.meta.env.VITE_API_URL)}
                                       alt={item.nama_barang}
                                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                     />
@@ -738,7 +739,7 @@ const BorrowFlow = () => {
                                   <div className="w-full">
                                     {detailItem.foto_barang ? (
                                       <img
-                                        src={detailItem.foto_barang}
+                                        src={getPhotoUrl(detailItem.foto_barang, import.meta.env.VITE_API_URL)}
                                         alt={detailItem.nama_barang}
                                         className="w-full max-h-[60vh] object-contain rounded-md border"
                                       />
@@ -788,7 +789,7 @@ const BorrowFlow = () => {
                       <div className="flex items-center gap-3">
                         {selectedItem?.foto_barang && (
                           <img
-                            src={selectedItem.foto_barang}
+                            src={getPhotoUrl(selectedItem.foto_barang, import.meta.env.VITE_API_URL)}
                             alt={selectedItem.nama_barang}
                             className="w-16 h-16 object-cover rounded"
                           />

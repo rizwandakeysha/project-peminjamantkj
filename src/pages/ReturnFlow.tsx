@@ -12,6 +12,7 @@ import { Item, Borrowing } from "@/types";
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { barangAPI, peminjamanAPI } from "@/lib/api";
+import { getPhotoUrl } from "@/lib/telegramUtils";
 
 type Step = "scan" | "verify" | "complete";
 
@@ -583,7 +584,7 @@ const ReturnFlow = () => {
                 <div className="flex items-start gap-4">
                   {foundItem.foto_barang && (
                     <img
-                      src={foundItem.foto_barang}
+                      src={getPhotoUrl(foundItem.foto_barang, import.meta.env.VITE_API_URL)}
                       alt={foundItem.nama_barang}
                       className="h-24 w-24 object-cover rounded"
                     />

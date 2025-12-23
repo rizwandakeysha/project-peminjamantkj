@@ -16,6 +16,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const guruRoutes = require('./routes/guruRoutes');
 const siswaRoutes = require('./routes/siswaRoutes');
+const telegramRoutes = require('./routes/telegramRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -55,12 +56,8 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Static files - serve uploads from configured path
-const uploadPath = process.env.UPLOAD_PATH || './uploads';
-const uploadsDir = path.isAbsolute(uploadPath) 
-  ? uploadPath 
-  : path.join(__dirname, uploadPath);
-app.use('/uploads', express.static(uploadsDir));
+// Static files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ============================================
 // ROUTES
@@ -94,6 +91,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/guru', guruRoutes);
 app.use('/api/siswa', siswaRoutes);
+app.use('/api/telegram', telegramRoutes);
 
 // ============================================
 // ERROR HANDLERS
@@ -101,10 +99,17 @@ app.use('/api/siswa', siswaRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
+  console.error('❌ ERROR OCCURRED');
+  console.error('   Path:', req.path);
+  console.error('   Method:', req.method);
+  console.error('   Message:', err.message);
+  console.error('   Stack:', err.stack);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
   });
 });
 

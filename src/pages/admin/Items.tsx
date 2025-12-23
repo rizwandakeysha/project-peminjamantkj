@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect } from "react";
 import AdminLayout from "@/layouts/AdminLayout";
 import { barangAPI, jenisBarangAPI } from "@/lib/api";
+import { uploadPhotoToTelegram, getPhotoUrl } from "@/lib/telegramUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -660,7 +661,7 @@ const Items = () => {
     }
   };
 
-  const handleFotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -676,12 +677,40 @@ const Items = () => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const base64String = e.target?.result as string;
-      setBarangFormData({ ...barangFormData, foto_barang: base64String });
-    };
-    reader.readAsDataURL(file);
+    try {
+      setLoading(true);
+      
+      // For new barang: just store file temporarily, will upload when barang is created
+      if (!editingBarang) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const base64String = e.target?.result as string;
+          setBarangFormData({ ...barangFormData, foto_barang: base64String });
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // For existing barang: upload directly to Telegram
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const result = await uploadPhotoToTelegram(file, editingBarang.id_barang, apiUrl);
+      
+      setBarangFormData({ ...barangFormData, foto_barang: result.foto_barang });
+      
+      // Also update the barang list immediately
+      setBarangList(
+        barangList.map((b) =>
+          b.id_barang === editingBarang.id_barang
+            ? { ...b, foto_barang: result.foto_barang }
+            : b
+        )
+      );
+    } catch (error) {
+      console.error("Error uploading foto:", error);
+      toast.error("Gagal mengupload foto");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -731,15 +760,35 @@ const Items = () => {
         return;
       }
 
-      // Read file as base64
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64String = event.target?.result as string;
-        setBarangFormData({ ...barangFormData, foto_barang: base64String });
-      };
-      reader.readAsDataURL(file);
+      // For new barang: just store file temporarily
+      if (!editingBarang) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64String = event.target?.result as string;
+          setBarangFormData({ ...barangFormData, foto_barang: base64String });
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // For existing barang: upload directly to Telegram
+      setLoading(true);
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const result = await uploadPhotoToTelegram(file, editingBarang.id_barang, apiUrl);
+      
+      setBarangFormData({ ...barangFormData, foto_barang: result.foto_barang });
+      
+      // Also update the barang list immediately
+      setBarangList(
+        barangList.map((b) =>
+          b.id_barang === editingBarang.id_barang
+            ? { ...b, foto_barang: result.foto_barang }
+            : b
+        )
+      );
+    } finally {
+      setLoading(false);
     }
-  };
 
   // ===== BARANG HANDLERS =====
   const handleAddBarang = async () => {
@@ -751,15 +800,20 @@ const Items = () => {
     try {
       setLoading(true);
       if (editingBarang) {
-        // Update barang via API
-        await barangAPI.update(editingBarang.id_barang, {
-          ...barangFormData,
+        // Update barang via API - only send allowed fields
+        const updatePayload = {
+          nama_barang: barangFormData.nama_barang,
+          deskripsi_barang: barangFormData.deskripsi_barang,
+          foto_barang: barangFormData.foto_barang,
+          no_serial_number: barangFormData.no_serial_number,
           status: barangFormData.status as
             | "Dipinjam"
             | "Tersedia"
             | "Rusak"
             | "Hilang",
-        });
+        };
+        
+        await barangAPI.update(editingBarang.id_barang, updatePayload);
         setBarangList(
           barangList.map((b) =>
             b.id_barang === editingBarang.id_barang
@@ -779,6 +833,9 @@ const Items = () => {
         );
         const generatedKode = generateKodeBarang(kodeJenis, barangForJenis);
 
+        // Create barang without foto first if it's base64
+        let fotoValue = "https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400";
+        
         const newBarang = {
           id_jenis_barang: selectedJenisId || 1,
           kode_barang: generatedKode,
@@ -790,11 +847,36 @@ const Items = () => {
             | "Tersedia"
             | "Rusak"
             | "Hilang",
-          foto_barang:
-            barangFormData.foto_barang ||
-            "https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400",
+          foto_barang: fotoValue,
         };
         const createdBarang = await barangAPI.create(newBarang);
+        
+        // If user selected a photo (base64), upload it to Telegram now
+        if (barangFormData.foto_barang && barangFormData.foto_barang.startsWith("data:")) {
+          try {
+            // Convert base64 to File
+            const base64String = barangFormData.foto_barang;
+            const arr = base64String.split(',');
+            const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg';
+            const bstr = atob(arr[1]);
+            const n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            for (let i = 0; i < n; i++) {
+              u8arr[i] = bstr.charCodeAt(i);
+            }
+            const photoFile = new File([u8arr], 'photo.jpg', { type: mime });
+            
+            const apiUrl = import.meta.env.VITE_API_URL;
+            const uploadResult = await uploadPhotoToTelegram(photoFile, createdBarang.id_barang, apiUrl);
+            
+            // Update the created barang with the file_id
+            createdBarang.foto_barang = uploadResult.foto_barang;
+          } catch (error) {
+            console.error('Error uploading photo to Telegram:', error);
+            // Continue anyway, barang is created without photo
+          }
+        }
+        
         setBarangList([...barangList, createdBarang]);
         toast.success(`Barang berhasil ditambahkan! (Kode: ${generatedKode})`);
       }
@@ -2393,7 +2475,7 @@ const Items = () => {
                       {barangFormData.foto_barang && (
                         <div className="relative">
                           <img
-                            src={barangFormData.foto_barang}
+                            src={getPhotoUrl(barangFormData.foto_barang, import.meta.env.VITE_API_URL)}
                             alt="Preview"
                             className="w-full h-32 object-cover rounded-md border"
                           />
