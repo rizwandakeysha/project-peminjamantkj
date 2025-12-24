@@ -526,91 +526,58 @@ const BorrowFlow = () => {
 
         {/* Step: Scan */}
         {currentStep === "scan" && (
-          <div className="space-y-6">
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/30 rounded-2xl p-4 md:p-5 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                  <p className="text-sm uppercase tracking-wide text-primary font-semibold">
-                    {scanMode === "qr" ? "Mode Kamera QR" : "Mode Scanner Fisik/Manual"}
-                  </p>
-                  <h3 className="text-xl font-bold text-foreground">
-                    {scanMode === "qr"
-                      ? "Arahkan QR ke frame bercahaya di layar"
-                      : "Scanner fisik siap, cukup arahkan atau ketik kode"}
-                  </h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {scanMode === "qr"
-                      ? "Kamera membaca otomatis. Jika lebih cepat dengan scanner fisik, pindah ke Input Manual."
-                      : "Kursor otomatis fokus di kolom input; scanner fisik mengetik dan tekan Enter. Kamera tetap tersedia di tab sebelah."}
-                  </p>
-                </div>
+          <Card>
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Scan Barang</CardTitle>
                 <div className="flex items-center gap-2 bg-white/60 backdrop-blur px-3 py-2 rounded-xl border border-border">
                   <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
                   <span className="text-sm font-medium text-foreground">
-                    {scanMode === "qr" ? "Ready • Kamera aktif" : "Ready • Input fokus"}
+                    {scanMode === "qr" ? "Kamera siap" : "Scanner fisik siap"}
                   </span>
                 </div>
               </div>
-            </div>
+              <div className="text-xs text-muted-foreground">
+                {scanMode === "qr" ? "Mode: Kamera QR" : "Mode: Scanner Fisik / Manual"}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Button
+                  variant={scanMode === "manual" ? "default" : "outline"}
+                  onClick={() => setScanMode("manual")}
+                >
+                  Scanner Fisik / Manual (disarankan)
+                </Button>
+                <Button
+                  variant={scanMode === "qr" ? "default" : "outline"}
+                  onClick={() => setScanMode("qr")}
+                >
+                  Kamera QR
+                </Button>
+              </div>
 
-            {/* Mode Switcher */}
-            <div className="flex gap-2">
-              <Button
-                variant={scanMode === "manual" ? "default" : "outline"}
-                onClick={() => setScanMode("manual")}
-              >
-                Scanner Fisik / Manual (disarankan)
-              </Button>
-              <Button
-                variant={scanMode === "qr" ? "default" : "outline"}
-                onClick={() => setScanMode("qr")}
-              >
-                Kamera QR
-              </Button>
-            </div>
-
-            {!cameraChecked && scanMode === "qr" ? (
-              <Card>
-                <CardContent className="pt-6 pb-6 text-center">
+              {!cameraChecked && scanMode === "qr" ? (
+                <div className="rounded-2xl border p-6 text-center">
                   <div className="animate-pulse space-y-2">
-                    <div className="h-8 w-8 mx-auto bg-muted rounded-full"></div>
-                    <p className="text-sm text-muted-foreground">
-                      Memeriksa kamera...
-                    </p>
+                    <div className="h-8 w-8 mx-auto bg-muted rounded-full" />
+                    <p className="text-sm text-muted-foreground">Memeriksa kamera...</p>
                   </div>
-                </CardContent>
-              </Card>
-            ) : scanMode === "qr" ? (
-              <>
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Scan QR Code barang atau kategori. Anda dapat scan kode barang individual (BRG-001) atau kode jenis (JENIS-001)
-                  </AlertDescription>
-                </Alert>
-                <QRScanner
-                  key="qr-scanner"
-                  onScanSuccess={handleQRScan}
-                  onClose={() => navigate("/")}
-                  onUnavailable={() => {
-                    setCameraUnavailable(true);
-                    setScanMode("manual");
-                  }}
-                />
-              </>
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Masukkan Kode Barang/Jenis</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Mode ini untuk scanner fisik/keyboard atau jika kamera tidak tersedia. Pastikan kursor fokus di kotak input.
-                      Barcode scanner biasanya mengetik otomatis lalu menekan Enter.
-                    </AlertDescription>
-                  </Alert>
+                </div>
+              ) : scanMode === "qr" ? (
+                <div className="rounded-2xl border p-4">
+                  <QRScanner
+                    key="qr-scanner"
+                    onScanSuccess={handleQRScan}
+                    onClose={() => navigate("/")}
+                    onUnavailable={() => {
+                      setCameraUnavailable(true);
+                      setScanMode("manual");
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="rounded-2xl border p-4 space-y-4">
                   <div>
                     <Label htmlFor="manual-code">Kode Barang atau Jenis</Label>
                     <Input
@@ -618,21 +585,16 @@ const BorrowFlow = () => {
                       placeholder="Contoh: TKJ-LAPT"
                       className="mt-1"
                       ref={manualInputRef}
-                      onKeyPress={(e) =>
-                        e.key === "Enter" && handleManualCode()
-                      }
+                      onKeyPress={(e) => e.key === "Enter" && handleManualCode()}
                     />
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Tips: jika menggunakan scanner fisik, biarkan kursor tetap di sini agar setiap scan langsung diproses.
-                    </p>
                   </div>
                   <Button onClick={handleManualCode} className="w-full">
                     Cari Barang
                   </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* Step: Form */}
@@ -1199,27 +1161,34 @@ const BorrowFlow = () => {
 
         {/* Step: Photo */}
         {currentStep === "photo" && (
-          <div className="space-y-4">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Ambil foto yang jelas menampilkan barang yang dipinjam
-              </AlertDescription>
-            </Alert>
-            <CameraCapture
-              onCapture={handlePhotoCapture}
-              label="Foto Barang"
-              isSubmitting={isSubmitting}
-            />
-            <Button
-              variant="outline"
-              onClick={() => setCurrentStep("form")}
-              className="w-full"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Kembali
-            </Button>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Foto Barang</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Ambil foto yang jelas menampilkan barang yang dipinjam.
+                </AlertDescription>
+              </Alert>
+              <div className="rounded-2xl border p-4">
+                <CameraCapture
+                  onCapture={handlePhotoCapture}
+                  label="Foto Barang"
+                  isSubmitting={isSubmitting}
+                />
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setCurrentStep("form")}
+                className="w-full"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Kembali
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
         {/* Step: Summary */}

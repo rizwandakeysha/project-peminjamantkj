@@ -402,14 +402,21 @@ const ReturnFlow = () => {
         {/* Step: Scan Barcode */}
         {currentStep === "scan" && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Barcode className="h-5 w-5 text-primary" />
-                Scan Barcode Barang
-              </CardTitle>
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>Scan Barcode Barang</CardTitle>
+                <div className="flex items-center gap-2 bg-white/60 backdrop-blur px-3 py-2 rounded-xl border border-border">
+                  <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-sm font-medium text-foreground">
+                    {scanMode === "qr" ? "Kamera siap" : "Scanner fisik siap"}
+                  </span>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {scanMode === "qr" ? "Mode: Kamera" : "Mode: Scanner Fisik / Manual"}
+              </div>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Mode toggle */}
+            <CardContent className="space-y-4">
               <div className="flex gap-2">
                 <Button
                   variant={scanMode === "manual" ? "default" : "outline"}
@@ -419,49 +426,35 @@ const ReturnFlow = () => {
                   }}
                   disabled={isLoading}
                 >
-                  Gunakan Scanner/Keyboard (disarankan)
+                  Scanner Fisik / Manual (disarankan)
                 </Button>
                 <Button
                   variant={scanMode === "qr" ? "default" : "outline"}
                   onClick={() => setScanMode("qr")}
                   disabled={isLoading}
                 >
-                  Gunakan Webcam
+                  Kamera Barcode
                 </Button>
               </div>
 
               {scanMode === "manual" ? (
-                <div className="space-y-4">
-                  <Alert className="bg-blue-50 border-blue-200">
-                    <AlertCircle className="h-4 w-4 text-blue-600" />
-                    <AlertDescription className="text-blue-900 text-sm">
-                      <strong>Instruksi:</strong> Letakkan kursor di input box di
-                      bawah, lalu gunakan scanner fisik/keyboard. Biasanya
-                      scanner akan mengetik kode lalu menekan Enter otomatis.
-                    </AlertDescription>
-                  </Alert>
-
+                <div className="rounded-2xl border p-4 space-y-4">
                   <div>
                     <Label htmlFor="barcode" className="flex items-center gap-2">
                       <Barcode className="h-4 w-4" />
-                      Barcode Barang *
+                      Kode Barang
                     </Label>
                     <Input
                       ref={scanInputRef}
                       id="barcode"
-                      placeholder="Scan barcode atau ketik kode barang (contoh: BRG-001)"
+                      placeholder="Contoh: BRG-001"
                       value={scannedBarcode}
-                      onChange={(e) =>
-                        setScannedBarcode(e.target.value.toUpperCase())
-                      }
+                      onChange={(e) => setScannedBarcode(e.target.value.toUpperCase())}
                       onKeyPress={handleKeyPress}
-                      className="text-lg font-mono mt-1 border-2"
+                      className="text-lg font-mono mt-1"
                       autoFocus
                       disabled={isLoading}
                     />
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Tekan Enter atau klik tombol Scan untuk memproses
-                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -473,7 +466,7 @@ const ReturnFlow = () => {
                       disabled={isLoading}
                     >
                       <Barcode className="h-4 w-4 mr-2" />
-                      Scan
+                      Cari Barang
                     </Button>
                     <Button
                       onClick={() => {
@@ -491,15 +484,7 @@ const ReturnFlow = () => {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <Alert className="bg-blue-50 border-blue-200">
-                    <AlertCircle className="h-4 w-4 text-blue-600" />
-                    <AlertDescription className="text-blue-900 text-sm">
-                      Mode webcam: pilih kamera lalu tekan Start untuk mulai
-                      scan barcode.
-                    </AlertDescription>
-                  </Alert>
-
+                <div className="rounded-2xl border p-4 space-y-4">
                   <div className="flex items-center justify-between mb-2 gap-2">
                     <div className="flex items-center gap-2 text-sm">
                       <Label htmlFor="camera-select">Kamera</Label>
@@ -571,20 +556,6 @@ const ReturnFlow = () => {
                   </div>
                 </div>
               )}
-
-              {/* Info */}
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription className="text-xs space-y-2">
-                  <p>
-                    <strong>Satu barang = Satu scan</strong>
-                  </p>
-                  <p>
-                    Jika ada beberapa barang yang dikembalikan, scan satu per
-                    satu dan proses untuk masing-masing barang.
-                  </p>
-                </AlertDescription>
-              </Alert>
             </CardContent>
           </Card>
         )}
@@ -593,11 +564,10 @@ const ReturnFlow = () => {
         {currentStep === "verify" && foundItem && (
           <Card>
             <CardHeader>
-              <CardTitle>Verifikasi Barang</CardTitle>
+              <CardTitle>Verifikasi Pengembalian</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Item Info */}
-              <div className="bg-green-50 border-2 border-green-200 p-4 rounded-lg">
+            <CardContent className="space-y-4">
+              <div className="rounded-2xl border p-4">
                 <div className="flex items-start gap-4">
                   {foundItem.foto_barang && (
                     <img
@@ -609,17 +579,15 @@ const ReturnFlow = () => {
                   <div className="flex-1 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-bold text-lg">
-                          {foundItem.nama_barang}
-                        </h3>
-                        <p className="text-sm font-mono text-gray-600">
+                        <h3 className="font-bold text-lg">{foundItem.nama_barang}</h3>
+                        <p className="text-sm font-mono text-muted-foreground">
                           Kode: {foundItem.kode_barang}
                         </p>
                       </div>
-                      <CheckCircle className="h-6 w-6 text-green-600" />
+                      <CheckCircle className="h-6 w-6 text-success" />
                     </div>
                     {foundItem.deskripsi_barang && (
-                      <p className="text-sm text-gray-700 bg-white/50 p-2 rounded">
+                      <p className="text-sm text-muted-foreground bg-muted/40 p-2 rounded">
                         {foundItem.deskripsi_barang}
                       </p>
                     )}
@@ -627,36 +595,29 @@ const ReturnFlow = () => {
                 </div>
               </div>
 
-              {/* Info Alert */}
-              <Alert className="bg-yellow-50 border-yellow-200">
-                <AlertCircle className="h-4 w-4 text-yellow-700" />
-                <AlertDescription className="text-yellow-800 text-sm">
-                  Pastikan barang yang di-scan sesuai dengan barang di tangan
-                  Anda sebelum melanjutkan.
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  Pastikan barang yang di-scan sesuai dengan barang di tangan Anda sebelum melanjutkan.
                 </AlertDescription>
               </Alert>
 
-              {/* Photo Capture */}
-              <div className="space-y-4">
-                <h4 className="font-semibold flex items-center gap-2">
-                  📸 Ambil Foto Verifikasi
-                </h4>
+              <div className="rounded-2xl border p-4 space-y-4">
+                <div className="space-y-1">
+                  <h4 className="font-semibold">Foto Verifikasi</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Ambil foto barang yang sedang dikembalikan.
+                  </p>
+                </div>
                 <CameraCapture
                   onCapture={handlePhotoVerification}
                   label="Foto Pengembalian Barang"
                 />
               </div>
 
-              {/* Actions */}
-              <div className="w-full">
-                <Button
-                  onClick={handleScanAgain}
-                  variant="outline"
-                  className="w-full"
-                >
-                  Batal / Scan Lain
-                </Button>
-              </div>
+              <Button onClick={handleScanAgain} variant="outline" className="w-full">
+                Batal / Scan Lain
+              </Button>
             </CardContent>
           </Card>
         )}
@@ -676,13 +637,13 @@ const ReturnFlow = () => {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Item Returned */}
-              <div className="bg-success/5 border-2 border-success rounded-lg p-6">
+              <div className="bg-success/5 border border-success/30 rounded-2xl p-6">
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">
                     Barang yang Dikembalikan:
                   </p>
                   <p className="text-2xl font-bold">{foundItem.nama_barang}</p>
-                  <p className="text-sm font-mono text-gray-600">
+                  <p className="text-sm font-mono text-muted-foreground">
                     Kode: {foundItem.kode_barang}
                   </p>
                 </div>
