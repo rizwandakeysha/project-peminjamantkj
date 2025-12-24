@@ -4,7 +4,7 @@ import { toast as toastFn } from 'sonner';
 /**
  * Compress image before upload to Telegram
  * Max Size: 1MB
- * Format: WebP
+ * Format: JPEG (better Telegram compatibility)
  * Max Dimensions: 1280px
  */
 export async function compressImage(file: File): Promise<File> {
@@ -13,7 +13,7 @@ export async function compressImage(file: File): Promise<File> {
       maxSizeMB: 1,
       maxWidthOrHeight: 1280,
       useWebWorker: true,
-      fileType: 'image/webp',
+      fileType: 'image/jpeg',
     };
 
     const compressedFile = await imageCompression(file, options);
@@ -108,6 +108,11 @@ export async function uploadCredentialToTelegram(
 export function getPhotoUrl(fileId: string | null, apiUrl: string): string {
   if (!fileId) {
     return 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400';
+  }
+
+  // If database still contains a full URL, just use it as-is.
+  if (fileId.startsWith('http://') || fileId.startsWith('https://')) {
+    return fileId;
   }
 
   // Check if it's already a Telegram file_id (not base64)

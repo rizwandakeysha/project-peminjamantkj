@@ -24,10 +24,35 @@ async function fetchAPI<T>(
       mode: "cors", // Explicitly set CORS mode
     });
 
-    const data = await response.json();
+    // Some backends (or proxies) may return 204 No Content or non-JSON bodies
+    // even when the request succeeded. Avoid throwing just because JSON parsing fails.
+    const rawText = await response.text();
+    const contentType = response.headers.get("content-type") || "";
+
+    let data: any = undefined;
+    if (rawText) {
+      const shouldParseJson = contentType.includes("application/json") || rawText.trim().startsWith("{");
+      if (shouldParseJson) {
+        try {
+          data = JSON.parse(rawText);
+        } catch (e) {
+          // Fallback: treat as plain text
+          data = { success: response.ok, message: rawText };
+        }
+      } else {
+        data = { success: response.ok, message: rawText };
+      }
+    } else {
+      data = { success: response.ok };
+    }
 
     if (!response.ok) {
-      throw new Error(data.message || "API request failed");
+      throw new Error(data?.message || `API request failed (${response.status})`);
+    }
+
+    // Ensure a consistent return shape
+    if (!data || typeof data !== "object" || !("success" in data)) {
+      return { success: true, data: data as T };
     }
 
     return data;

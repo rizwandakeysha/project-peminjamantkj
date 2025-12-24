@@ -765,6 +765,8 @@ const Items = () => {
     try {
       setSavingBarang(true);
       if (editingBarang) {
+        const editingId = (editingBarang.id_barang ?? editingBarang.id) as number;
+
         // If foto is base64 (new upload), upload to Telegram first
         let fotoFileId = barangFormData.foto_barang;
         
@@ -782,7 +784,7 @@ const Items = () => {
             }
             const photoFile = new File([u8arr], 'photo.jpg', { type: mime });
             
-            const uploadResult = await uploadPhotoToTelegram(photoFile, editingBarang.id_barang, API_BASE_URL);
+            const uploadResult = await uploadPhotoToTelegram(photoFile, editingId, API_BASE_URL);
             
             // Use the returned file_id
             fotoFileId = uploadResult.foto_barang;
@@ -816,7 +818,7 @@ const Items = () => {
         
         // Try to update other fields (foto already updated by uploadPhotoToTelegram if it was base64)
         try {
-          await barangAPI.update(editingBarang.id_barang, updatePayload);
+          await barangAPI.update(editingId, updatePayload);
         } catch (updateError: any) {
           console.error('Update error:', updateError);
           // If it's "No valid fields to update", that's okay
@@ -824,13 +826,22 @@ const Items = () => {
             throw updateError; // Re-throw if it's a real error
           }
         }
-        
-        setBarangList(
-          barangList.map((b) =>
-            b.id_barang === editingBarang.id_barang
-              ? { ...b, ...barangFormData, foto_barang: fotoFileId }
-              : b
-          )
+
+        // Update local list so changes (incl. foto) appear immediately without refresh.
+        setBarangList((prev) =>
+          prev.map((b: any) => {
+            const rowId = (b.id_barang ?? b.id) as number | undefined;
+            if (rowId === editingId) {
+              return {
+                ...b,
+                ...barangFormData,
+                foto_barang: fotoFileId,
+                id_barang: b.id_barang ?? editingId,
+                id: b.id ?? editingId,
+              };
+            }
+            return b;
+          })
         );
         toast.success("Barang berhasil diupdate!");
       } else {
@@ -892,7 +903,8 @@ const Items = () => {
       }
     } catch (error) {
       console.error("Error saving barang:", error);
-      toast.error("Gagal menyimpan barang");
+      const message = (error as any)?.message;
+      toast.error(message ? `Gagal menyimpan barang: ${message}` : "Gagal menyimpan barang");
     } finally {
       setSavingBarang(false);
     }
@@ -939,6 +951,11 @@ const Items = () => {
   };
 
   const handleEditBarang = (barang: any) => {
+    const normalizedBarang = {
+      ...barang,
+      id_barang: barang.id_barang ?? barang.id,
+      id: barang.id ?? barang.id_barang,
+    };
     setBarangFormData({
       nama_barang: barang.nama_barang,
       kode_barang: barang.kode_barang,
@@ -947,7 +964,7 @@ const Items = () => {
       status: barang.status,
       foto_barang: barang.foto_barang || "",
     });
-    setEditingBarang(barang);
+    setEditingBarang(normalizedBarang);
     setShowAddBarangDialog(true);
   };
 
