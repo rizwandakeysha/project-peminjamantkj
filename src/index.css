@@ -102,3 +102,114 @@
     transition: var(--transition-base);
   }
 }
+
+/* Thermal receipt (58mm) printing */
+.receipt58 {
+  width: 58mm;
+  padding: 3mm;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.25;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+}
+
+.receipt58__center {
+  text-align: center;
+}
+
+.receipt58__title {
+  font-weight: 700;
+}
+
+.receipt58__subtitle {
+  font-weight: 600;
+}
+
+.receipt58__divider {
+  margin: 6px 0;
+}
+
+.receipt58__kv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.receipt58__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.receipt58__sectionTitle {
+  margin: 6px 0 4px;
+  font-weight: 700;
+}
+
+.receipt58__items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.receipt58__itemName {
+  font-weight: 600;
+}
+
+.receipt58__mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.receipt58__small {
+  font-size: 10px;
+}
+
+.receipt58__spacer {
+  height: 10px;
+}
+
+.receipt58__sign {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.receipt58__signLine {
+  letter-spacing: 0.5px;
+}
+
+@media print {
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: hsl(var(--card));
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  /* For normal page printing: show only the receipt wrapper */
+  .print-receipt,
+  .print-receipt * {
+    visibility: visible;
+  }
+
+  .print-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+
+  /* For react-to-print iframe: it may include only the receipt node */
+  .receipt58,
+  .receipt58 * {
+    visibility: visible;
+  }
+}

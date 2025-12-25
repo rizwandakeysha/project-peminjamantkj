@@ -3,6 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import PublicLayout from "@/layouts/PublicLayout";
 import QRScanner from "@/components/QRScanner";
 import CameraCapture from "@/components/CameraCapture";
+import { useReactToPrint } from "react-to-print";
+import { ReceiptComponent, type ReceiptData } from "@/components/ReceiptComponent";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -48,7 +50,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
-import { Item } from "@/types";
+import { Borrowing, Item } from "@/types";
 import { toast } from "react-hot-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -152,6 +154,14 @@ const BorrowFlow = () => {
   // Summary state
   const [borrowingCode, setBorrowingCode] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [receiptBorrowing, setReceiptBorrowing] = useState<Borrowing | null>(null);
+  const [isReceiptLoading, setIsReceiptLoading] = useState(false);
+
+  const receiptRef = useRef<HTMLDivElement | null>(null);
+  const handlePrintReceipt = useReactToPrint({
+    contentRef: receiptRef,
+    documentTitle: borrowingCode ? `Struk-${borrowingCode}` : "Struk-SIMABAR",
+  });
 
   // Scan deduplication using ref to avoid re-renders
   const lastScanRef = useRef<{ code: string; time: number }>({
@@ -183,6 +193,47 @@ const BorrowFlow = () => {
 
     loadData();
   }, []);
+
+  useEffect(() => {
+    const loadReceiptBorrowing = async () => {
+      if (currentStep !== "summary" || !borrowingCode) return;
+
+      setIsReceiptLoading(true);
+      try {
+        const borrowing = await peminjamanAPI.getByKode(borrowingCode);
+        setReceiptBorrowing(borrowing);
+      } catch (error) {
+        console.error("Error loading receipt borrowing:", error);
+        setReceiptBorrowing(null);
+      } finally {
+        setIsReceiptLoading(false);
+      }
+    };
+
+    loadReceiptBorrowing();
+  }, [currentStep, borrowingCode]);
+
+  const receiptData: ReceiptData | null = receiptBorrowing
+    ? {
+        kode_peminjaman: receiptBorrowing.kode_peminjaman || borrowingCode,
+        tanggal: (() => {
+          const raw = receiptBorrowing.tanggal_pinjam || receiptBorrowing.created_at;
+          const date = raw ? new Date(raw) : new Date();
+          return date.toLocaleString("id-ID", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        })(),
+        nama_peminjam: receiptBorrowing.nama_peminjam || formData.nama_peminjam,
+        items: (receiptBorrowing.detail_peminjaman || []).map((d) => ({
+          nama_barang: d.nama_barang || "(Barang)",
+          kode_barang: d.kode_barang || "-",
+        })),
+      }
+    : null;
 
   // Check camera availability on mount
   useEffect(() => {
@@ -1326,6 +1377,28 @@ const BorrowFlow = () => {
                   />
                 </div>
               )}
+
+              {receiptData && (
+                <div className="print-receipt fixed -left-[10000px] top-0">
+                  <ReceiptComponent ref={receiptRef} data={receiptData} />
+                </div>
+              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={isReceiptLoading || !receiptData}
+                onClick={() => {
+                  if (!receiptData) {
+                    toast.error("Data struk belum siap");
+                    return;
+                  }
+                  handlePrintReceipt();
+                }}
+              >
+                {isReceiptLoading ? "Menyiapkan struk..." : "Cetak Struk"}
+              </Button>
 
               <Button
                 onClick={handleCompleteAndClose}

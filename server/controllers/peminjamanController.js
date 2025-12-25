@@ -21,8 +21,8 @@ exports.getAllPeminjaman = async (req, res) => {
                json_build_object(
                  'id_detail_peminjaman', dp.id_detail_peminjaman,
                  'id_barang', dp.id_barang,
-                 'nama_barang', COALESCE(b.nama_barang, dp.nama_barang, '(Barang Dihapus)'),
-                 'kode_barang', COALESCE(b.kode_barang, dp.kode_barang, '-'),
+                 'nama_barang', COALESCE(dp.nama_barang, b.nama_barang, '(Barang Dihapus)'),
+                 'kode_barang', COALESCE(dp.kode_barang, b.kode_barang, '-'),
                  'foto_barang', b.foto_barang,
                  'id_jenis_barang', jb.id_jenis_barang,
                  'nama_jenis_barang', jb.nama_jenis_barang,
@@ -75,8 +75,8 @@ exports.getPeminjamanByCode = async (req, res) => {
                 json_build_object(
                   'id_detail_peminjaman', dp.id_detail_peminjaman,
                   'id_barang', dp.id_barang,
-                  'nama_barang', COALESCE(b.nama_barang, dp.nama_barang, '(Barang Dihapus)'),
-                  'kode_barang', COALESCE(b.kode_barang, dp.kode_barang, '-'),
+                  'nama_barang', COALESCE(dp.nama_barang, b.nama_barang, '(Barang Dihapus)'),
+                  'kode_barang', COALESCE(dp.kode_barang, b.kode_barang, '-'),
                   'foto_barang', b.foto_barang,
                   'id_jenis_barang', jb.id_jenis_barang,
                   'nama_jenis_barang', jb.nama_jenis_barang,
