@@ -324,7 +324,6 @@ const ReturnFlow = () => {
           const file = new File([blob], 'return.jpg', { type: 'image/jpeg' });
           
           fotoReturnUrl = await uploadCredentialToTelegram(file, API_BASE_URL);
-          toast.success('Foto pengembalian berhasil diupload ke Telegram');
         } catch (error) {
           console.error('Error uploading return photo to Telegram:', error);
           toast.error('Gagal upload foto pengembalian, menggunakan data lokal');
