@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Calendar, Clock } from "lucide-react";
+import { Calendar, Clock, Heart } from "lucide-react";
 
 interface PublicLayoutProps {
   children: ReactNode;
@@ -76,9 +76,16 @@ const PublicLayout = ({ children }: PublicLayoutProps) => {
 
       <footer className="bg-card border-t border-border mt-16">
         <div className="container mx-auto px-4 py-6">
-          <p className="text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Unit TKJ - Sistem Peminjaman Barang
-          </p>
+          <div className="text-center text-sm text-muted-foreground space-y-1">
+            <div className="inline-flex items-center gap-1">
+              <span>made with</span>
+              <Heart className="h-4 w-4 text-destructive" />
+              <span>by Capstone Project 5 &amp; PKL FILKOM UB</span>
+            </div>
+            <div className="text-xs">
+              Sistem ini dibuat untuk kebutuhan peminjaman barang TKJ VOHISMA SMKN 5 Malang.
+            </div>
+          </div>
         </div>
       </footer>
     </div>

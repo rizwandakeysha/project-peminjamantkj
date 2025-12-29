@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import PublicLayout from "@/layouts/PublicLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Lock, LogIn } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Home, Lock, LogIn } from "lucide-react";
 import { setAdminToken, setAdminInfo } from "@/lib/auth";
 import { adminAPI } from "@/lib/api";
 import { toast } from "react-hot-toast";
@@ -16,6 +16,7 @@ const AdminLogin = () => {
   const location = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -61,6 +62,12 @@ const AdminLogin = () => {
   return (
     <PublicLayout>
       <div className="max-w-md mx-auto">
+        <Button variant="ghost" size="sm" asChild className="mb-4">
+          <Link to="/">
+            <Home className="h-4 w-4 mr-2" />
+            Ke Beranda
+          </Link>
+        </Button>
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -84,15 +91,33 @@ const AdminLogin = () => {
               </div>
               <div>
                 <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Masukkan password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Masukkan password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
+                    required
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2"
+                    onClick={() => setShowPassword((v) => !v)}
+                    disabled={loading}
+                    aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
 
               {error && (

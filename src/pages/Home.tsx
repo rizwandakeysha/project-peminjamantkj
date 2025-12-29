@@ -5,7 +5,6 @@ import ItemCard from "@/components/ItemCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ArrowRight,
   Package,
   RotateCcw,
   Search,
@@ -93,60 +92,72 @@ const Home = () => {
     <PublicLayout>
       <div className="space-y-8">
         {/* Hero Section */}
-        <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent rounded-2xl p-8 border border-border shadow-custom">
-          <div className="max-w-3xl">
-            <div className="flex items-center gap-4 mb-4">
+        <div className="relative w-full overflow-hidden rounded-2xl border border-border shadow-custom aspect-[1920/709]">
+          <img
+            src="/home-rev/BACKGROUND.png"
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="relative px-6 py-7 md:px-12 md:py-7">
+            <div className="absolute left-6 top-5 md:left-10 md:top-7 flex items-center gap-4">
               <img
-                src="/LOGOK5.png"
+                src="/home-rev/K5.png"
                 alt="Logo SMKN 5 Malang"
-                className="h-14 w-14 rounded-md border border-border bg-white object-contain shadow-sm"
+                className="h-12 w-12 md:h-20 md:w-20 object-contain"
               />
-              <div>
-                <p className="text-sm text-muted-foreground">Unit TKJ</p>
-                <p className="text-lg font-semibold text-foreground">
-                  SMKN 5 Malang
-                </p>
-              </div>
+              <img
+                src="/home-rev/KREATIF%20(NUNGGU%20VOHISMA%20MERAH).png"
+                alt="Logo kreatif"
+                className="h-12 w-12 md:h-24 md:w-24 object-contain"
+              />
             </div>
 
-            <h2 className="text-3xl font-bold mb-3">Selamat Datang!</h2>
-            <p className="text-lg text-muted-foreground mb-6">
-              Sistem peminjaman barang Unit TKJ SMKN 5 Malang. Pilih barang
-              yang ingin dipinjam atau kembalikan barang yang sudah selesai
-              digunakan.
-            </p>
+            <div className="pt-16 md:pt-20 max-w-3xl">
+              <img
+                src="/home-rev/LOGO.png"
+                alt="TUKT"
+                className="h-24 md:h-28 object-contain mb-4"
+              />
+              <h2 className="text-3xl md:text-4xl font-extrabold text-foreground mb-3 leading-tight">
+                Selamat Datang di SIMABAR !
+              </h2>
+              <p className="text-base md:text-lg text-muted-foreground mb-7 max-w-2xl">
+                Sistem peminjaman barang Unit TKJ SMKN 5 Malang. Pilih barang yang ingin dipinjam atau
+                kembalikan barang yang sudah selesai digunakan.
+              </p>
 
-            <div className="flex flex-wrap gap-6 items-center">
-              <Button
-                size="lg"
-                asChild
-                className="shadow-md px-8 py-5 text-2xl md:text-2xl w-56 h-30 rounded-xl font-semibold md:w-auto transition-transform transform hover:scale-105"
-              >
-                <Link
-                  to="/borrow"
-                  className="flex items-center justify-center gap-3 w-full md:w-auto"
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+                <Button
+                  size="lg"
+                  asChild
+                  className="shadow-md rounded-xl font-semibold w-full sm:w-[340px] h-14 md:h-16 justify-center"
                 >
-                  <Package className="h-7 w-7" />
-                  <span>Pinjam Barang</span>
-                  <ArrowRight className="h-6 w-6" />
-                </Link>
-              </Button>
+                  <Link to="/borrow" className="flex items-center justify-center gap-3 w-full">
+                    <img
+                      src="/home-rev/icon%20pinjam.png"
+                      alt=""
+                      className="h-6 w-6 md:h-7 md:w-7 object-contain"
+                    />
+                    <span className="text-lg md:text-xl">Pinjam Barang</span>
+                  </Link>
+                </Button>
 
-              <Button
-                size="lg"
-                variant="outline"
-                asChild
-                className="shadow-md px-8 py-5 text-2xl md:text-2xl rounded-xl h-30 font-semibold w-full md:w-auto transition-transform transform hover:scale-105"
-              >
-                <Link
-                  to="/return"
-                  className="flex items-center justify-center gap-3 w-full md:w-auto"
+                <Button
+                  size="lg"
+                  variant="outline"
+                  asChild
+                  className="shadow-md rounded-xl font-semibold w-full sm:w-[340px] h-14 md:h-16 justify-center bg-gray-600 hover:bg-gray-700 text-white border-transparent"
                 >
-                  <RotateCcw className="h-7 w-7" />
-                  <span>Kembalikan Barang</span>
-                  <ArrowRight className="h-6 w-6" />
-                </Link>
-              </Button>
+                  <Link to="/return" className="flex items-center justify-center gap-3 w-full">
+                    <img
+                      src="/home-rev/icon%20kembalikan.png"
+                      alt=""
+                      className="h-6 w-6 md:h-7 md:w-7 object-contain"
+                    />
+                    <span className="text-lg md:text-xl">Kembalikan Barang</span>
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,7 +1,8 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Package, ClipboardList, Home, LogOut, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { clearAdminToken, parseAdminToken } from "@/lib/auth";
 import { toast } from "react-hot-toast";
 
@@ -13,6 +14,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [adminName, setAdminName] = useState<string>("Admin");
+  const [inactivityOpen, setInactivityOpen] = useState(false);
+
+  const IDLE_MS = useMemo(() => 15 * 60 * 1000, []);
+  const PROMPT_MS = useMemo(() => 2 * 60 * 1000, []);
+
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const promptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const token = parseAdminToken();
@@ -31,8 +39,99 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     navigate("/admin-tkj/login", { replace: true });
   };
 
+  const clearTimers = () => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+    if (promptTimerRef.current) {
+      clearTimeout(promptTimerRef.current);
+      promptTimerRef.current = null;
+    }
+  };
+
+  const resetIdleTimer = () => {
+    if (inactivityOpen) return;
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      setInactivityOpen(true);
+    }, IDLE_MS);
+  };
+
+  useEffect(() => {
+    resetIdleTimer();
+
+    const onActivity = () => resetIdleTimer();
+    const events: Array<keyof WindowEventMap> = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "scroll",
+      "touchstart",
+    ];
+
+    for (const event of events) {
+      window.addEventListener(event, onActivity, { passive: true });
+    }
+
+    return () => {
+      for (const event of events) {
+        window.removeEventListener(event, onActivity);
+      }
+      clearTimers();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [IDLE_MS, inactivityOpen]);
+
+  useEffect(() => {
+    if (!inactivityOpen) {
+      if (promptTimerRef.current) {
+        clearTimeout(promptTimerRef.current);
+        promptTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (promptTimerRef.current) clearTimeout(promptTimerRef.current);
+    promptTimerRef.current = setTimeout(() => {
+      setInactivityOpen(false);
+      clearAdminToken();
+      toast.error("Logout otomatis karena tidak ada aktivitas");
+      navigate("/admin-tkj/login", { replace: true });
+    }, PROMPT_MS);
+
+    return () => {
+      if (promptTimerRef.current) {
+        clearTimeout(promptTimerRef.current);
+        promptTimerRef.current = null;
+      }
+    };
+  }, [PROMPT_MS, inactivityOpen, navigate]);
+
+  const handleStillHere = () => {
+    setInactivityOpen(false);
+    resetIdleTimer();
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      <Dialog open={inactivityOpen}>
+        <DialogContent
+          onEscapeKeyDown={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Anda masih di sana?</DialogTitle>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            Tidak ada aktivitas selama 15 menit. Klik tombol di bawah dalam 2 menit untuk tetap login.
+          </div>
+          <div className="flex gap-2 justify-end">
+            <Button onClick={handleStillHere}>Ya, saya di sini</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <header className="bg-card border-b border-border shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
