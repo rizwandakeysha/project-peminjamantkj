@@ -118,10 +118,10 @@ const Home = () => {
                 alt="TUKT"
                 className="h-24 md:h-28 object-contain mb-4"
               />
-              <h2 className="text-3xl md:text-4xl font-extrabold text-foreground mb-3 leading-tight">
+              <h2 className="text-3xl md:text-4xl font-extrabold text-foreground mt-5 mb-1 leading-tight">
                 Selamat Datang di SIMABAR !
               </h2>
-              <p className="text-base md:text-lg text-muted-foreground mb-7 max-w-2xl">
+              <p className="text-base md:text-lg text-muted-foreground mb-4 max-w-2xl">
                 Sistem peminjaman barang Unit TKJ SMKN 5 Malang. Pilih barang yang ingin dipinjam atau
                 kembalikan barang yang sudah selesai digunakan.
               </p>
