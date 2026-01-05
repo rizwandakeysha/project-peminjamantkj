@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useReactToPrint } from "react-to-print";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import AdminLayout from "@/layouts/AdminLayout";
 import { Button } from "@/components/ui/button";
+import { ReceiptComponent, ReceiptData } from "@/components/ReceiptComponent";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -28,6 +30,7 @@ import {
   Trash2,
   Calendar,
   ChevronsUpDown,
+  Printer,
 } from "lucide-react";
 import { Borrowing } from "@/types";
 import { formatDateTimeLocal, formatDateLocal } from "@/lib/formatters";
@@ -82,6 +85,15 @@ const Borrowings = () => {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<string>("tanggal_pinjam");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [receiptBorrowing, setReceiptBorrowing] = useState<Borrowing | null>(null);
+  
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const handlePrintReceipt = useReactToPrint({
+    contentRef: receiptRef,
+    documentTitle: receiptBorrowing?.kode_peminjaman 
+      ? `Struk-${receiptBorrowing.kode_peminjaman}` 
+      : "Struk-SIMABAR",
+  });
 
   // Helper function to get date in Indonesia timezone (UTC+7)
   const getIndonesiaDate = (
@@ -325,6 +337,13 @@ const Borrowings = () => {
   const handleViewDetail = (borrowing: Borrowing) => {
     setSelectedBorrowing(borrowing);
     setDetailDialogOpen(true);
+  };
+
+  const onPrintReceipt = (borrowing: Borrowing) => {
+    setReceiptBorrowing(borrowing);
+    setTimeout(() => {
+      handlePrintReceipt();
+    }, 100);
   };
 
   const handleDelete = async () => {
@@ -1259,12 +1278,22 @@ const Borrowings = () => {
                   </div>
                 )}
 
-                <Button
-                  onClick={() => setDetailDialogOpen(false)}
-                  className="w-full"
-                >
-                  Tutup
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => onPrintReceipt(selectedBorrowing)}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Cetak Struk
+                  </Button>
+                  <Button
+                    onClick={() => setDetailDialogOpen(false)}
+                    className="flex-1"
+                  >
+                    Tutup
+                  </Button>
+                </div>
               </div>
             )}
           </DialogContent>
@@ -1338,6 +1367,34 @@ const Borrowings = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Hidden Receipt for Printing */}
+        <div style={{ position: "absolute", left: "-9999px", top: 0 }}>
+          {receiptBorrowing && (
+            <ReceiptComponent 
+              ref={receiptRef} 
+              data={{
+                kode_peminjaman: receiptBorrowing.kode_peminjaman,
+                tanggal: (() => {
+                  const raw = receiptBorrowing.tanggal_pinjam || receiptBorrowing.created_at;
+                  const date = raw ? new Date(raw) : new Date();
+                  return date.toLocaleString("id-ID", {
+                    year: "numeric",
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                })(),
+                nama_peminjam: receiptBorrowing.nama_peminjam,
+                items: (receiptBorrowing.detail_peminjaman || []).map((d: any) => ({
+                  nama_barang: d.nama_barang || "(Barang)",
+                  kode_barang: d.kode_barang || "-",
+                })),
+              }}
+            />
+          )}
+        </div>
       </div>
     </AdminLayout>
   );

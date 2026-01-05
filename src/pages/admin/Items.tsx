@@ -10,6 +10,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
@@ -888,7 +889,11 @@ const Items = () => {
             }
             const photoFile = new File([u8arr], 'photo.jpg', { type: mime });
             
-            const uploadResult = await uploadPhotoToTelegram(photoFile, createdBarang.id_barang, API_BASE_URL);
+            const uploadResult = await uploadPhotoToTelegram(
+              photoFile,
+              createdBarang.id_barang ?? createdBarang.id,
+              API_BASE_URL
+            );
             
             // Update the local object with file_id (DB already updated by telegramController)
             createdBarang.foto_barang = uploadResult.foto_barang;
@@ -1834,6 +1839,9 @@ const Items = () => {
                                           <DialogTitle>
                                             Import Barang dari File
                                           </DialogTitle>
+                                          <DialogDescription>
+                                            Unggah CSV/XLSX dengan kolom minimal nama_barang untuk menambah data barang.
+                                          </DialogDescription>
                                         </DialogHeader>
                                         <div className="space-y-4">
                                           <div>
@@ -2204,6 +2212,9 @@ const Items = () => {
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Review Import Barang</DialogTitle>
+              <DialogDescription>
+                Tinjau data barang sebelum diimport. Pastikan kode dan status sudah sesuai.
+              </DialogDescription>
               <p className="text-sm text-muted-foreground">
                 {getJenisName(selectedJenisId || 0)}
                 {barangImportFileName ? ` • File: ${barangImportFileName}` : ""}
@@ -2291,6 +2302,9 @@ const Items = () => {
           <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Review Import Jenis & Barang</DialogTitle>
+              <DialogDescription>
+                Pastikan daftar jenis dan barang sudah benar sebelum proses import berjalan.
+              </DialogDescription>
               <p className="text-sm text-muted-foreground">
                 {jenisImportFileName ? `File: ${jenisImportFileName} • ` : ""}
                 {jenisImportPreview.length} jenis, {jenisImportPreview.reduce((acc, j) => acc + (j.barang?.length || 0), 0)} barang
@@ -2419,6 +2433,9 @@ const Items = () => {
               <DialogTitle>
                 {editingBarang ? "Edit Barang" : "Tambah Barang"}
               </DialogTitle>
+              <DialogDescription>
+                Isi detail barang beserta foto (opsional) lalu simpan untuk menambahkan ke inventaris.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 overflow-y-auto pr-4">
               <div>

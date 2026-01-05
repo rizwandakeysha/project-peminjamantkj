@@ -31,17 +31,23 @@ export async function compressImage(file: File): Promise<File> {
  */
 export async function uploadPhotoToTelegram(
   file: File,
-  idBarang: number,
+  idBarang: number | string,
   apiUrl: string
 ): Promise<{ id_barang: number; foto_barang: string }> {
   try {
     // Compress image first
     const compressedFile = await compressImage(file);
 
+    if (idBarang === undefined || idBarang === null || idBarang === ("" as any)) {
+      throw new Error("id_barang tidak valid untuk upload foto");
+    }
+
+    const idString = typeof idBarang === "string" ? idBarang : idBarang.toString();
+
     // Create FormData for upload
     const formData = new FormData();
     formData.append('photo', compressedFile);
-    formData.append('id_barang', idBarang.toString());
+    formData.append('id_barang', idString);
 
     // Upload to backend Telegram endpoint
     const response = await fetch(`${apiUrl}/telegram/upload`, {
