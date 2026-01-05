@@ -799,8 +799,13 @@ const Items = () => {
         // Update barang via API - only send allowed fields
         const updatePayload: any = {
           nama_barang: barangFormData.nama_barang,
-          deskripsi_barang: barangFormData.deskripsi_barang,
-          no_serial_number: barangFormData.no_serial_number,
+          deskripsi_barang: barangFormData.deskripsi_barang?.trim()
+            ? barangFormData.deskripsi_barang
+            : null,
+          // IMPORTANT: no_serial_number has UNIQUE constraint; send null when empty
+          no_serial_number: barangFormData.no_serial_number?.trim()
+            ? barangFormData.no_serial_number
+            : null,
           status: barangFormData.status as
             | "Dipinjam"
             | "Tersedia"
@@ -1479,6 +1484,9 @@ const Items = () => {
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Import Jenis Barang & Barang</DialogTitle>
+                  <DialogDescription>
+                    Import data jenis barang dan barang sekaligus menggunakan template CSV.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
@@ -1571,6 +1579,9 @@ const Items = () => {
                       ? "Edit Jenis Barang"
                       : "Tambah Jenis Barang"}
                   </DialogTitle>
+                  <DialogDescription>
+                    Isi kode dan nama jenis barang, lalu simpan perubahan.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
@@ -1796,6 +1807,9 @@ const Items = () => {
                                     Barang -{" "}
                                     {getJenisName(selectedJenisId || 0)}
                                   </DialogTitle>
+                                  <DialogDescription>
+                                    Kelola daftar barang pada jenis ini (tambah, import, hapus, dan download barcode).
+                                  </DialogDescription>
                                   <div className="flex gap-2">
                                     <Button
                                       size="sm"
@@ -2613,6 +2627,9 @@ const Items = () => {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>QR Jenis Barang</DialogTitle>
+              <DialogDescription>
+                Preview QR untuk jenis barang, lalu download jika diperlukan.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 text-center">
               {qrDataUrl ? (
@@ -2648,6 +2665,9 @@ const Items = () => {
           <DialogContent className="max-w-md scale-150">
             <DialogHeader>
               <DialogTitle>Barcode Barang</DialogTitle>
+              <DialogDescription>
+                Preview barcode barang, lalu download jika diperlukan.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 text-center">
               {barcodeDataUrl ? (
@@ -2683,6 +2703,9 @@ const Items = () => {
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Pilih Barcode untuk Didownload</DialogTitle>
+              <DialogDescription>
+                Pilih barang yang ingin didownload barcodenya dalam format ZIP.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
@@ -2770,6 +2793,9 @@ const Items = () => {
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Pilih QR Jenis Barang untuk Didownload</DialogTitle>
+              <DialogDescription>
+                Pilih jenis barang yang ingin didownload QR-nya dalam format ZIP.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div className="flex items-center justify-between p-3 bg-muted rounded-lg">

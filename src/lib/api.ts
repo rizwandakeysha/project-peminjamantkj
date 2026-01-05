@@ -47,7 +47,8 @@ async function fetchAPI<T>(
     }
 
     if (!response.ok) {
-      throw new Error(data?.message || `API request failed (${response.status})`);
+      const extra = typeof data?.error === "string" && data.error ? `: ${data.error}` : "";
+      throw new Error((data?.message || `API request failed (${response.status})`) + extra);
     }
 
     // Ensure a consistent return shape

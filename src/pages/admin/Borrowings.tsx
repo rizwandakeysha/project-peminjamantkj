@@ -42,6 +42,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -1091,6 +1092,9 @@ const Borrowings = () => {
           <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Detail Peminjaman</DialogTitle>
+              <DialogDescription>
+                Ringkasan transaksi peminjaman dan daftar barang yang dipinjam.
+              </DialogDescription>
             </DialogHeader>
             {selectedBorrowing && (
               <div className="space-y-4 overflow-y-auto flex-1 pr-2">
@@ -1306,6 +1310,9 @@ const Borrowings = () => {
               <DialogTitle>
                 Foto Pengembalian - {photoPreviewData?.nama_barang}
               </DialogTitle>
+              <DialogDescription>
+                Preview foto bukti pengembalian barang.
+              </DialogDescription>
             </DialogHeader>
             {photoPreviewData && (
               <div className="space-y-2">
@@ -1333,6 +1340,9 @@ const Borrowings = () => {
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Export Data Peminjaman</DialogTitle>
+              <DialogDescription>
+                Pilih format file untuk mengekspor data peminjaman.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-4">
               <p className="text-sm text-muted-foreground">

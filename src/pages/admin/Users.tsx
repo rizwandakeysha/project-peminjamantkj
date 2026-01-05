@@ -18,6 +18,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
@@ -700,6 +701,9 @@ const Users = () => {
                       <DialogTitle>
                         Tambah {activeTab === "guru" ? "Guru" : "Siswa"}
                       </DialogTitle>
+                      <DialogDescription>
+                        Isi data lalu klik Simpan untuk menambahkan ke database.
+                      </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                       {activeTab === "guru" && (
@@ -990,6 +994,9 @@ const Users = () => {
                   ? "Guru"
                   : "Siswa"}
               </DialogTitle>
+              <DialogDescription>
+                Perbarui data lalu klik Update untuk menyimpan.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               {editingItem?.type === "admin" && (
@@ -1106,6 +1113,9 @@ const Users = () => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Import CSV Guru</DialogTitle>
+              <DialogDescription>
+                Upload file CSV sesuai template untuk menambah data guru.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -1170,6 +1180,9 @@ const Users = () => {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Import CSV Siswa</DialogTitle>
+              <DialogDescription>
+                Upload file CSV sesuai template untuk menambah data siswa.
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
