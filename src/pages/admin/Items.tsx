@@ -24,6 +24,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import CameraCapture from "@/components/CameraCapture";
 import {
   Package,
@@ -34,6 +40,7 @@ import {
   QrCode,
   Barcode,
   Download,
+  Printer,
   Camera as CameraIcon,
   Upload as UploadIcon,
 } from "lucide-react";
@@ -212,18 +219,24 @@ const Items = () => {
   const [barcodeKode, setBarcodeKode] = useState<string>("");
   const [barcodeNama, setBarcodeNama] = useState<string>("");
   
-  // barcode selection dialog states
+  // Unified print dialog (QR jenis barang & Barcode barang)
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
+  const [printDialogType, setPrintDialogType] = useState<'qr' | 'barcode'>('qr');
+  const [printSearchQuery, setPrintSearchQuery] = useState('');
+  const [selectedItemsForPrint, setSelectedItemsForPrint] = useState<number[]>([]);
+  
+  // Legacy states (kept for backward compatibility with download functions)
   const [showBarcodeSelectionDialog, setShowBarcodeSelectionDialog] = useState(false);
   const [selectedBarangForDownload, setSelectedBarangForDownload] = useState<number[]>([]);
   const [jenisForBarcodeDownload, setJenisForBarcodeDownload] = useState<number | null>(null);
-  
-  // QR jenis selection dialog states
   const [showQRSelectionDialog, setShowQRSelectionDialog] = useState(false);
   const [selectedJenisForDownload, setSelectedJenisForDownload] = useState<number[]>([]);
+  
   const [barangImportPreview, setBarangImportPreview] = useState<any[]>([]);
   const [barangImportFileName, setBarangImportFileName] = useState("");
   const [jenisImportPreview, setJenisImportPreview] = useState<any[]>([]);
   const [jenisImportFileName, setJenisImportFileName] = useState("");
+
 
   // Form states
   const [jenisFormData, setJenisFormData] = useState({
@@ -309,6 +322,140 @@ const Items = () => {
       setSelectedBarangForDownload(selectedBarangForDownload.filter(id => id !== barangId));
     } else {
       setSelectedBarangForDownload([...selectedBarangForDownload, barangId]);
+    }
+  };
+
+  // Print selected barcodes to A4
+  const printSelectedBarcodes = async () => {
+    if (!jenisForBarcodeDownload) return;
+    
+    const jenis = jenisBarangList.find(j => j.id_jenis_barang === jenisForBarcodeDownload);
+    if (!jenis) {
+      toast.error("Jenis barang tidak ditemukan");
+      return;
+    }
+
+    const barangForJenis = getBarangForJenis(jenisForBarcodeDownload);
+    const selectedBarang = barangForJenis.filter(b => 
+      selectedBarangForDownload.includes(b.id || b.id_barang)
+    );
+
+    if (selectedBarang.length === 0) {
+      toast.error("Pilih minimal 1 barang untuk dicetak");
+      return;
+    }
+
+    try {
+      toast.loading(`Mempersiapkan ${selectedBarang.length} barcode untuk cetak...`);
+      
+      // Generate all barcodes
+      const barcodeDataUrls: Array<{ kode: string; nama: string; dataUrl: string }> = [];
+      for (const barang of selectedBarang) {
+        try {
+          const dataUrl = await createBarcodeDataURL(barang.kode_barang, {
+            width: 960,
+            height: 300,
+          });
+          barcodeDataUrls.push({
+            kode: barang.kode_barang,
+            nama: barang.nama_barang,
+            dataUrl,
+          });
+        } catch (err) {
+          console.error(`Gagal membuat barcode untuk ${barang.kode_barang}:`, err);
+        }
+      }
+
+      if (barcodeDataUrls.length === 0) {
+        toast.dismiss();
+        toast.error("Gagal membuat barcode");
+        return;
+      }
+
+      // Create print window with A4 layout
+      const printWindow = window.open("", "_blank", "width=800,height=600");
+      if (!printWindow) {
+        toast.dismiss();
+        toast.error("Gagal membuka window cetak");
+        return;
+      }
+
+      // Build HTML for print
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Cetak Barcode - ${jenis.nama_jenis_barang}</title>
+            <style>
+              @page {
+                size: A4;
+                margin: 10mm;
+              }
+              * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+              }
+              body {
+                font-family: Arial, sans-serif;
+                background: white;
+              }
+              .print-container {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 5mm;
+                padding: 0;
+              }
+              .barcode-item {
+                border: 0.5px solid #333;
+                padding: 3mm;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                page-break-inside: avoid;
+                height: 2cm;
+              }
+              .barcode-item img {
+                width: 100%;
+                height: 2cm;
+                object-fit: contain;
+              }
+              @media print {
+                body {
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="print-container">
+              ${barcodeDataUrls.map(item => `
+                <div class="barcode-item">
+                  <img src="${item.dataUrl}" alt="${item.kode}" />
+                </div>
+              `).join('')}
+            </div>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.focus();
+
+      toast.dismiss();
+      toast.success("Siap cetak!");
+
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    } catch (error) {
+      console.error("Error printing barcodes:", error);
+      toast.dismiss();
+      toast.error("Gagal mencetak barcode");
     }
   };
 
@@ -415,6 +562,329 @@ const Items = () => {
       setSelectedJenisForDownload(selectedJenisForDownload.filter(id => id !== jenisId));
     } else {
       setSelectedJenisForDownload([...selectedJenisForDownload, jenisId]);
+    }
+  };
+
+  // Print selected QR jenis to A4
+  // ===== UNIFIED PRINT HANDLER FOR QR & BARCODE =====
+  const handleUnifiedPrint = async () => {
+    if (selectedItemsForPrint.length === 0) {
+      toast.error(
+        `Pilih minimal 1 ${printDialogType === 'qr' ? 'jenis barang' : 'barang'} untuk dicetak`
+      );
+      return;
+    }
+
+    try {
+      toast.loading(
+        `Mempersiapkan ${selectedItemsForPrint.length} ${printDialogType === 'qr' ? 'QR code' : 'barcode'} untuk cetak...`
+      );
+
+      if (printDialogType === 'qr') {
+        // Print QR jenis barang
+        const selectedJenis = jenisBarangList.filter(j =>
+          selectedItemsForPrint.includes(j.id_jenis_barang)
+        );
+
+        const qrDataUrls: Array<{ kode: string; nama: string; dataUrl: string }> = [];
+        for (const jenis of selectedJenis) {
+          try {
+            const dataUrl = await createSimpleLabelDataURL(
+              jenis.kode_jenis_barang,
+              jenis.nama_jenis_barang,
+              { width: 720, height: 900 } // 4:5 ratio (8cm width, 10cm height)
+            );
+            qrDataUrls.push({
+              kode: jenis.kode_jenis_barang,
+              nama: jenis.nama_jenis_barang,
+              dataUrl,
+            });
+          } catch (err) {
+            console.error(`Error QR ${jenis.kode_jenis_barang}:`, err);
+          }
+        }
+
+        if (qrDataUrls.length === 0) {
+          toast.dismiss();
+          toast.error("Gagal membuat QR code");
+          return;
+        }
+
+        const printWindow = window.open("", "_blank", "width=800,height=600");
+        if (!printWindow) {
+          toast.dismiss();
+          toast.error("Gagal membuka window cetak");
+          return;
+        }
+
+        const htmlContent = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <title>Cetak QR Jenis Barang</title>
+              <style>
+                @page { size: A4; margin: 10mm; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: Arial, sans-serif; background: white; }
+                .print-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5mm; padding: 0; }
+                .qr-item { border: 0.5px solid #333; padding: 3mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-inside: avoid; }
+                .qr-item img { width: 8cm; height: 10cm; object-fit: contain; }
+                @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+              </style>
+            </head>
+            <body>
+              <div class="print-container">
+                ${qrDataUrls.map(item => `<div class="qr-item"><img src="${item.dataUrl}" alt="${item.kode}" /></div>`).join('')}
+              </div>
+            </body>
+          </html>
+        `;
+
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        printWindow.focus();
+        toast.dismiss();
+        toast.success("Siap cetak!");
+        setTimeout(() => printWindow.print(), 500);
+        setShowPrintDialog(false);
+      } else {
+        // Print barcode
+        const selectedBarang = barangList.filter(b =>
+          selectedItemsForPrint.includes(b.id || b.id_barang)
+        );
+
+        const barcodeDataUrls: Array<{ kode: string; nama: string; dataUrl: string }> = [];
+        for (const barang of selectedBarang) {
+          try {
+            const dataUrl = await createBarcodeDataURL(barang.kode_barang, {
+              width: 960,
+              height: 300,
+            });
+            barcodeDataUrls.push({
+              kode: barang.kode_barang,
+              nama: barang.nama_barang,
+              dataUrl,
+            });
+          } catch (err) {
+            console.error(`Error barcode ${barang.kode_barang}:`, err);
+          }
+        }
+
+        if (barcodeDataUrls.length === 0) {
+          toast.dismiss();
+          toast.error("Gagal membuat barcode");
+          return;
+        }
+
+        const printWindow = window.open("", "_blank", "width=800,height=600");
+        if (!printWindow) {
+          toast.dismiss();
+          toast.error("Gagal membuka window cetak");
+          return;
+        }
+
+        const htmlContent = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8" />
+              <title>Cetak Barcode</title>
+              <style>
+                @page { size: A4; margin: 10mm; }
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: Arial, sans-serif; background: white; }
+                .print-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; padding: 0; }
+                .barcode-item { border: 0.5px solid #333; padding: 3mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-inside: avoid; height: 2cm; }
+                .barcode-item img { width: 100%; height: 2cm; object-fit: contain; }
+                @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+              </style>
+            </head>
+            <body>
+              <div class="print-container">
+                ${barcodeDataUrls.map(item => `<div class="barcode-item"><img src="${item.dataUrl}" alt="${item.kode}" /></div>`).join('')}
+              </div>
+            </body>
+          </html>
+        `;
+
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        printWindow.focus();
+        toast.dismiss();
+        toast.success("Siap cetak!");
+        setTimeout(() => printWindow.print(), 500);
+        setShowPrintDialog(false);
+      }
+    } catch (error) {
+      console.error("Error printing:", error);
+      toast.dismiss();
+      toast.error("Gagal mencetak");
+    }
+  };
+
+  // Open unified print dialog
+  const openPrintDialog = (type: 'qr' | 'barcode') => {
+    if (type === 'qr' && jenisBarangList.length === 0) {
+      toast.error("Tidak ada jenis barang");
+      return;
+    }
+    if (type === 'barcode' && barangList.length === 0) {
+      toast.error("Tidak ada barang");
+      return;
+    }
+
+    setPrintDialogType(type);
+    setSelectedItemsForPrint(
+      type === 'qr'
+        ? jenisBarangList.map(j => j.id_jenis_barang)
+        : barangList.map(b => b.id || b.id_barang)
+    );
+    setPrintSearchQuery('');
+    setShowPrintDialog(true);
+  };
+
+  // Filter items for print dialog based on search query
+  const getFilteredItemsForPrint = () => {
+    const query = printSearchQuery.toLowerCase();
+    if (printDialogType === 'qr') {
+      return jenisBarangList.filter(j =>
+        j.nama_jenis_barang.toLowerCase().includes(query) ||
+        j.kode_jenis_barang.toLowerCase().includes(query)
+      );
+    } else {
+      return barangList.filter(b =>
+        b.nama_barang.toLowerCase().includes(query) ||
+        b.kode_barang.toLowerCase().includes(query)
+      );
+    }
+  };
+
+  // Legacy: Print selected QR jenis to A4 (kept for backward compatibility)
+  const printSelectedQRJenis = async () => {
+    const selectedJenis = jenisBarangList.filter(j => 
+      selectedJenisForDownload.includes(j.id_jenis_barang)
+    );
+
+    if (selectedJenis.length === 0) {
+      toast.error("Pilih minimal 1 jenis barang untuk dicetak");
+      return;
+    }
+
+    try {
+      toast.loading(`Mempersiapkan ${selectedJenis.length} QR code untuk cetak...`);
+      
+      // Generate all QR codes
+      const qrDataUrls: Array<{ kode: string; nama: string; dataUrl: string }> = [];
+      for (const jenis of selectedJenis) {
+        try {
+          const dataUrl = await createSimpleLabelDataURL(
+            jenis.kode_jenis_barang,
+            jenis.nama_jenis_barang,
+            {
+              width: 720,
+              height: 900,
+            }
+          );
+          qrDataUrls.push({
+            kode: jenis.kode_jenis_barang,
+            nama: jenis.nama_jenis_barang,
+            dataUrl,
+          });
+        } catch (err) {
+          console.error(`Gagal membuat QR untuk ${jenis.kode_jenis_barang}:`, err);
+        }
+      }
+
+      if (qrDataUrls.length === 0) {
+        toast.dismiss();
+        toast.error("Gagal membuat QR code");
+        return;
+      }
+
+      // Create print window with A4 layout
+      const printWindow = window.open("", "_blank", "width=800,height=600");
+      if (!printWindow) {
+        toast.dismiss();
+        toast.error("Gagal membuka window cetak");
+        return;
+      }
+
+      // Build HTML for print (QR 10cm height, 8cm width = 4:5 ratio, 2 columns)
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Cetak QR Jenis Barang</title>
+            <style>
+              @page {
+                size: A4;
+                margin: 10mm;
+              }
+              * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+              }
+              body {
+                font-family: Arial, sans-serif;
+                background: white;
+              }
+              .print-container {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 5mm;
+                padding: 0;
+              }
+              .qr-item {
+                border: 0.5px solid #333;
+                padding: 3mm;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                page-break-inside: avoid;
+              }
+              .qr-item img {
+                width: 8cm;
+                height: 10cm;
+                object-fit: contain;
+              }
+              @media print {
+                body {
+                  -webkit-print-color-adjust: exact;
+                  print-color-adjust: exact;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="print-container">
+              ${qrDataUrls.map(item => `
+                <div class="qr-item">
+                  <img src="${item.dataUrl}" alt="${item.kode}" />
+                </div>
+              `).join('')}
+            </div>
+          </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      printWindow.focus();
+
+      toast.dismiss();
+      toast.success("Siap cetak!");
+
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    } catch (error) {
+      console.error("Error printing QR codes:", error);
+      toast.dismiss();
+      toast.error("Gagal mencetak QR code");
     }
   };
 
@@ -1438,49 +1908,52 @@ const Items = () => {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              className="gap-2"
-              onClick={openQRJenisSelectionDialog}
-              disabled={jenisBarangList.length === 0}
-            >
-              <Download className="h-4 w-4" />
-              Download QR Jenis (ZIP)
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => {
-                setSelectedJenisForDelete([]);
-                setShowBulkDeleteJenisDialog(true);
-              }}
-              disabled={jenisBarangList.length === 0}
-              className="gap-2"
-            >
-              <Trash2 className="h-4 w-4" />
-              Hapus Semua Jenis
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exportJenisBarangCsv}
-              disabled={barangList.length === 0}
-              className="gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export CSV 
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="secondary"
+                  className="gap-2"
+                  disabled={jenisBarangList.length === 0}
+                >
+                  ⚙️ Menu
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => openPrintDialog('qr')} className="gap-2">
+                  <Printer className="h-4 w-4" />
+                  Cetak QR & Barcode
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={openQRJenisSelectionDialog} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Download QR ZIP
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportJenisBarangCsv} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Export CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => {
+                    setSelectedJenisForDelete([]);
+                    setShowBulkDeleteJenisDialog(true);
+                  }}
+                  className="gap-2 text-red-600"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Hapus Semua Jenis
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => setShowImportJenisBarangDialog(true)}
+                  className="gap-2"
+                >
+                  <UploadIcon className="h-4 w-4" />
+                  Import Jenis & Barang
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Dialog
               open={showImportJenisBarangDialog}
               onOpenChange={setShowImportJenisBarangDialog}
             >
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setShowImportJenisBarangDialog(true)}
-              >
-                Import Jenis & Barang
-              </Button>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Import Jenis Barang & Barang</DialogTitle>
@@ -1802,7 +2275,7 @@ const Items = () => {
                                 </Button>
                               </DialogTrigger>
                               <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
-                                <DialogHeader className="flex flex-row items-center justify-between">
+                                <DialogHeader>
                                   <DialogTitle>
                                     Barang -{" "}
                                     {getJenisName(selectedJenisId || 0)}
@@ -1810,144 +2283,156 @@ const Items = () => {
                                   <DialogDescription>
                                     Kelola daftar barang pada jenis ini (tambah, import, hapus, dan download barcode).
                                   </DialogDescription>
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="destructive"
-                                      onClick={() => {
-                                        setSelectedBarangForDelete([]);
-                                        setShowBulkDeleteBarangDialog(true);
-                                      }}
-                                      className="gap-2"
-                                      disabled={getBarangForJenis(selectedJenisId || 0).length === 0}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                      Hapus Semua
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() => openBarcodeSelectionDialog(selectedJenisId || 0)}
-                                      className="gap-2"
-                                      disabled={getBarangForJenis(selectedJenisId || 0).length === 0}
-                                    >
-                                      <Download className="h-4 w-4" />
-                                      Download Semua Barcode (ZIP)
-                                    </Button>
-                                    <Dialog
-                                      open={showImportDialog}
-                                      onOpenChange={setShowImportDialog}
-                                    >
+                                </DialogHeader>
+                                <div className="flex gap-2 mb-4">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
                                       <Button
                                         size="sm"
-                                        variant="outline"
-                                        onClick={() =>
-                                          setShowImportDialog(true)
-                                        }
+                                        variant="secondary"
+                                        className="gap-2"
+                                        disabled={getBarangForJenis(selectedJenisId || 0).length === 0}
+                                      >
+                                        ⚙️ Menu
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                      <DropdownMenuItem 
+                                        onClick={() => openBarcodeSelectionDialog(selectedJenisId || 0)}
                                         className="gap-2"
                                       >
+                                        <Printer className="h-4 w-4" />
+                                        Cetak Barcode
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => openBarcodeSelectionDialog(selectedJenisId || 0)}
+                                        className="gap-2"
+                                      >
+                                        <Download className="h-4 w-4" />
+                                        Download Barcode (ZIP)
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => setShowImportDialog(true)}
+                                        className="gap-2"
+                                      >
+                                        <UploadIcon className="h-4 w-4" />
                                         Import CSV/XLSX
-                                      </Button>
-                                      <DialogContent className="max-w-md">
-                                        <DialogHeader>
-                                          <DialogTitle>
-                                            Import Barang dari File
-                                          </DialogTitle>
-                                          <DialogDescription>
-                                            Unggah CSV/XLSX dengan kolom minimal nama_barang untuk menambah data barang.
-                                          </DialogDescription>
-                                        </DialogHeader>
-                                        <div className="space-y-4">
-                                          <div>
-                                            <p className="text-sm text-muted-foreground mb-3">
-                                              Format CSV harus memiliki kolom:{" "}
-                                              <strong>nama_barang</strong>
-                                            </p>
-                                            <p className="text-xs text-muted-foreground mb-4">
-                                              <strong>
-                                                Kode barang otomatis generate!
-                                              </strong>{" "}
-                                              Kolom opsional: no_serial_number,
-                                              deskripsi_barang, status,
-                                              foto_barang
-                                            </p>
-                                            <Button
-                                              size="sm"
-                                              variant="secondary"
-                                              className="w-full mb-4"
-                                              onClick={() => {
-                                                const link =
-                                                  document.createElement("a");
-                                                link.href =
-                                                  "/template-barang.csv";
-                                                link.download =
-                                                  "template-barang.csv";
-                                                document.body.appendChild(link);
-                                                link.click();
-                                                document.body.removeChild(link);
-                                                toast.success(
-                                                  "Template CSV berhasil didownload"
-                                                );
-                                              }}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => {
+                                          setSelectedBarangForDelete([]);
+                                          setShowBulkDeleteBarangDialog(true);
+                                        }}
+                                        className="gap-2 text-red-600"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                        Hapus Semua
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setBarangFormData({
+                                        nama_barang: "",
+                                        kode_barang: "",
+                                        no_serial_number: "",
+                                        deskripsi_barang: "",
+                                        status: "Tersedia",
+                                        foto_barang: "",
+                                      });
+                                      setEditingBarang(null);
+                                      setShowAddBarangDialog(true);
+                                    }}
+                                    className="gap-2"
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                    Tambah Barang
+                                  </Button>
+                                  <Dialog
+                                    open={showImportDialog}
+                                    onOpenChange={setShowImportDialog}
+                                  >
+                                    <DialogContent className="max-w-md">
+                                      <DialogHeader>
+                                        <DialogTitle>
+                                          Import Barang dari File
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                          Unggah CSV/XLSX dengan kolom minimal nama_barang untuk menambah data barang.
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <div className="space-y-4">
+                                        <div>
+                                          <p className="text-sm text-muted-foreground mb-3">
+                                            Format CSV harus memiliki kolom:{" "}
+                                            <strong>nama_barang</strong>
+                                          </p>
+                                          <p className="text-xs text-muted-foreground mb-4">
+                                            <strong>
+                                              Kode barang otomatis generate!
+                                            </strong>{" "}
+                                            Kolom opsional: no_serial_number,
+                                            deskripsi_barang, status,
+                                            foto_barang
+                                          </p>
+                                          <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            className="w-full mb-4"
+                                            onClick={() => {
+                                              const link =
+                                                document.createElement("a");
+                                              link.href =
+                                                "/template-barang.csv";
+                                              link.download =
+                                                "template-barang.csv";
+                                              document.body.appendChild(link);
+                                              link.click();
+                                              document.body.removeChild(link);
+                                              toast.success(
+                                                "Template CSV berhasil didownload"
+                                              );
+                                            }}
+                                          >
+                                            📥 Download Template CSV
+                                          </Button>
+                                          <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
+                                            <input
+                                              type="file"
+                                              accept=".csv,.xlsx"
+                                              onChange={handleImportBarang}
+                                              className="hidden"
+                                              id="import-file"
+                                            />
+                                            <label
+                                              htmlFor="import-file"
+                                              className="cursor-pointer"
                                             >
-                                              📥 Download Template CSV
-                                            </Button>
-                                            <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
-                                              <input
-                                                type="file"
-                                                accept=".csv,.xlsx"
-                                                onChange={handleImportBarang}
-                                                className="hidden"
-                                                id="import-file"
-                                              />
-                                              <label
-                                                htmlFor="import-file"
-                                                className="cursor-pointer"
-                                              >
-                                                <div className="text-sm font-medium">
-                                                  Klik untuk memilih file atau
-                                                  drag & drop
-                                                </div>
-                                                <div className="text-xs text-muted-foreground mt-1">
-                                                  CSV atau XLSX
-                                                </div>
-                                              </label>
-                                            </div>
-                                          </div>
-                                          <div className="flex gap-2 justify-end">
-                                            <Button
-                                              variant="outline"
-                                              onClick={() =>
-                                                setShowImportDialog(false)
-                                              }
-                                            >
-                                              Batal
-                                            </Button>
+                                              <div className="text-sm font-medium">
+                                                Klik untuk memilih file atau
+                                                drag & drop
+                                              </div>
+                                              <div className="text-xs text-muted-foreground mt-1">
+                                                CSV atau XLSX
+                                              </div>
+                                            </label>
                                           </div>
                                         </div>
-                                      </DialogContent>
-                                    </Dialog>
-                                    <Button
-                                      size="sm"
-                                      onClick={() => {
-                                        setBarangFormData({
-                                          nama_barang: "",
-                                          kode_barang: "",
-                                          no_serial_number: "",
-                                          deskripsi_barang: "",
-                                          status: "Tersedia",
-                                          foto_barang: "",
-                                        });
-                                        setEditingBarang(null);
-                                        setShowAddBarangDialog(true);
-                                      }}
-                                      className="gap-2"
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                      Tambah Barang
-                                    </Button>
-                                  </div>
-                                </DialogHeader>
+                                        <div className="flex gap-2 justify-end">
+                                          <Button
+                                            variant="outline"
+                                            onClick={() =>
+                                              setShowImportDialog(false)
+                                            }
+                                          >
+                                            Batal
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                </div>
                                 <div className="space-y-4">
                                   {getBarangForJenis(selectedJenisId || 0)
                                     .length > 0 ? (
@@ -2698,7 +3183,215 @@ const Items = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Barcode Selection Dialog for ZIP Download */}
+        {/* Unified Print Dialog for QR & Barcode */}
+        <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Cetak QR & Barcode</DialogTitle>
+              <DialogDescription>
+                Pilih jenis ({printDialogType === 'qr' ? 'cetak QR jenis barang' : 'cetak barcode barang'})
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Type selector */}
+              <div className="flex gap-2 p-3 bg-muted rounded-lg">
+                <label className="flex items-center gap-2 cursor-pointer flex-1 p-2 rounded hover:bg-muted-foreground/10 transition">
+                  <input
+                    type="radio"
+                    name="print-type"
+                    value="qr"
+                    checked={printDialogType === 'qr'}
+                    onChange={() => {
+                      setPrintDialogType('qr');
+                      setSelectedItemsForPrint(jenisBarangList.map(j => j.id_jenis_barang));
+                      setPrintSearchQuery('');
+                    }}
+                    className="h-4 w-4"
+                  />
+                  <QrCode className="h-4 w-4" />
+                  <span className="font-medium">QR Jenis Barang</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer flex-1 p-2 rounded hover:bg-muted-foreground/10 transition">
+                  <input
+                    type="radio"
+                    name="print-type"
+                    value="barcode"
+                    checked={printDialogType === 'barcode'}
+                    onChange={() => {
+                      setPrintDialogType('barcode');
+                      setSelectedItemsForPrint(barangList.map(b => b.id || b.id_barang));
+                      setPrintSearchQuery('');
+                    }}
+                    className="h-4 w-4"
+                  />
+                  <Barcode className="h-4 w-4" />
+                  <span className="font-medium">Barcode Barang</span>
+                </label>
+              </div>
+
+              {/* Search input */}
+              <Input
+                placeholder={`Cari ${printDialogType === 'qr' ? 'jenis barang' : 'barang'}...`}
+                value={printSearchQuery}
+                onChange={(e) => setPrintSearchQuery(e.target.value)}
+                className="w-full"
+              />
+
+              {/* Select all checkbox */}
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="select-all-print"
+                    checked={
+                      selectedItemsForPrint.length === getFilteredItemsForPrint().length &&
+                      getFilteredItemsForPrint().length > 0
+                    }
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedItemsForPrint(
+                          getFilteredItemsForPrint().map(item =>
+                            printDialogType === 'qr'
+                              ? (item as any).id_jenis_barang
+                              : item.id || (item as any).id_barang
+                          )
+                        );
+                      } else {
+                        setSelectedItemsForPrint([]);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  <label htmlFor="select-all-print" className="font-semibold cursor-pointer">
+                    Pilih Semua ({getFilteredItemsForPrint().length}{' '}
+                    {printDialogType === 'qr' ? 'jenis barang' : 'barang'})
+                  </label>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {selectedItemsForPrint.length} terpilih
+                </span>
+              </div>
+
+              {/* Items list */}
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {printDialogType === 'qr'
+                  ? (getFilteredItemsForPrint() as any[]).map((jenis) => {
+                      const itemCount = barangList.filter(
+                        (b) => b.id_jenis_barang === jenis.id_jenis_barang
+                      ).length;
+
+                      return (
+                        <div
+                          key={jenis.id_jenis_barang}
+                          className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                          onClick={() => {
+                            if (selectedItemsForPrint.includes(jenis.id_jenis_barang)) {
+                              setSelectedItemsForPrint(
+                                selectedItemsForPrint.filter(id => id !== jenis.id_jenis_barang)
+                              );
+                            } else {
+                              setSelectedItemsForPrint([...selectedItemsForPrint, jenis.id_jenis_barang]);
+                            }
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedItemsForPrint.includes(jenis.id_jenis_barang)}
+                            onChange={() => {}}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <code className="bg-muted px-2 py-1 rounded text-xs font-semibold text-primary">
+                                {jenis.kode_jenis_barang}
+                              </code>
+                              <span className="font-medium">{jenis.nama_jenis_barang}</span>
+                            </div>
+                            {jenis.deskripsi_jenis_barang && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {jenis.deskripsi_jenis_barang}
+                              </div>
+                            )}
+                          </div>
+                          <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                            {itemCount} item
+                          </span>
+                        </div>
+                      );
+                    })
+                  : (getFilteredItemsForPrint() as any[]).map((barang) => (
+                      <div
+                        key={barang.id || barang.id_barang}
+                        className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                        onClick={() => {
+                          const barangId = barang.id || barang.id_barang;
+                          if (selectedItemsForPrint.includes(barangId)) {
+                            setSelectedItemsForPrint(
+                              selectedItemsForPrint.filter(id => id !== barangId)
+                            );
+                          } else {
+                            setSelectedItemsForPrint([...selectedItemsForPrint, barangId]);
+                          }
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedItemsForPrint.includes(barang.id || barang.id_barang)}
+                          onChange={() => {}}
+                          onClick={(e) => e.stopPropagation()}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        {barang.foto_barang && (
+                          <img
+                            src={getPhotoUrl(barang.foto_barang, API_BASE_URL)}
+                            alt={barang.nama_barang}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <div className="font-medium">{barang.nama_barang}</div>
+                          <div className="text-xs text-muted-foreground font-mono">
+                            {barang.kode_barang}
+                          </div>
+                        </div>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            barang.status === "Tersedia"
+                              ? "bg-green-100 text-green-700"
+                              : barang.status === "Dipinjam"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {barang.status}
+                        </span>
+                      </div>
+                    ))}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 justify-end pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPrintDialog(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  onClick={handleUnifiedPrint}
+                  disabled={selectedItemsForPrint.length === 0}
+                  className="gap-2"
+                >
+                  <Printer className="h-4 w-4" />
+                  Cetak {selectedItemsForPrint.length} {printDialogType === 'qr' ? 'QR Code' : 'Barcode'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Legacy Barcode Selection Dialog for ZIP Download (kept for backward compatibility) */}
         <Dialog open={showBarcodeSelectionDialog} onOpenChange={setShowBarcodeSelectionDialog}>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -2776,6 +3469,15 @@ const Items = () => {
                   Batal
                 </Button>
                 <Button
+                  variant="secondary"
+                  onClick={printSelectedBarcodes}
+                  disabled={selectedBarangForDownload.length === 0}
+                  className="gap-2"
+                >
+                  <Printer className="h-4 w-4" />
+                  Cetak {selectedBarangForDownload.length} Barcode
+                </Button>
+                <Button
                   onClick={downloadSelectedBarcodes}
                   disabled={selectedBarangForDownload.length === 0}
                   className="gap-2"
@@ -2788,7 +3490,7 @@ const Items = () => {
           </DialogContent>
         </Dialog>
 
-        {/* QR Jenis Selection Dialog for ZIP Download */}
+        {/* Legacy QR Jenis Selection Dialog for ZIP Download */}
         <Dialog open={showQRSelectionDialog} onOpenChange={setShowQRSelectionDialog}>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -2862,6 +3564,15 @@ const Items = () => {
                   onClick={() => setShowQRSelectionDialog(false)}
                 >
                   Batal
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={printSelectedQRJenis}
+                  disabled={selectedJenisForDownload.length === 0}
+                  className="gap-2"
+                >
+                  <Printer className="h-4 w-4" />
+                  Cetak {selectedJenisForDownload.length} QR Code
                 </Button>
                 <Button
                   onClick={downloadSelectedQRJenis}
