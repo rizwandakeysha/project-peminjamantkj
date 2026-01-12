@@ -361,6 +361,12 @@ export const createSimpleLabelDataURL = async (
   ctx.textBaseline = "top";
   ctx.fillText(itemName, W / 2, textY);
 
+	// Add built-in outline border (≈0.5pt -> ~2px at 100 px/cm)
+	const borderPx = 2;
+	ctx.strokeStyle = "#000000";
+	ctx.lineWidth = borderPx;
+	ctx.strokeRect(borderPx / 2, borderPx / 2, W - borderPx, H - borderPx);
+
   return canvas.toDataURL("image/png");
 };
 

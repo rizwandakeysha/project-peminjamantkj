@@ -219,11 +219,13 @@ const Items = () => {
   const [barcodeKode, setBarcodeKode] = useState<string>("");
   const [barcodeNama, setBarcodeNama] = useState<string>("");
   
-  // Unified print dialog (QR jenis barang & Barcode barang)
-  const [showPrintDialog, setShowPrintDialog] = useState(false);
-  const [printDialogType, setPrintDialogType] = useState<'qr' | 'barcode'>('qr');
-  const [printSearchQuery, setPrintSearchQuery] = useState('');
-  const [selectedItemsForPrint, setSelectedItemsForPrint] = useState<number[]>([]);
+  // Separate print dialogs: QR-only and Barcode-only
+  const [showQRPrintDialog, setShowQRPrintDialog] = useState(false);
+  const [showBarcodePrintDialog, setShowBarcodePrintDialog] = useState(false);
+  const [qrPrintSearchQuery, setQRPrintSearchQuery] = useState('');
+  const [barcodePrintSearchQuery, setBarcodePrintSearchQuery] = useState('');
+  const [selectedQRForPrint, setSelectedQRForPrint] = useState<number[]>([]);
+  const [selectedBarcodeForPrint, setSelectedBarcodeForPrint] = useState<number[]>([]);
   
   // Legacy states (kept for backward compatibility with download functions)
   const [showBarcodeSelectionDialog, setShowBarcodeSelectionDialog] = useState(false);
@@ -565,157 +567,137 @@ const Items = () => {
     }
   };
 
-  // Print selected QR jenis to A4
-  // ===== UNIFIED PRINT HANDLER FOR QR & BARCODE =====
-  const handleUnifiedPrint = async () => {
-    if (selectedItemsForPrint.length === 0) {
-      toast.error(
-        `Pilih minimal 1 ${printDialogType === 'qr' ? 'jenis barang' : 'barang'} untuk dicetak`
-      );
+  // ===== QR PRINT HANDLER (QR-only) =====
+  const handleQRPrint = async () => {
+    if (selectedQRForPrint.length === 0) {
+      toast.error("Pilih minimal 1 QR code untuk dicetak");
       return;
     }
 
+    const selectedJenis = jenisBarangList.filter(j => 
+      selectedQRForPrint.includes(j.id_jenis_barang)
+    );
+
     try {
-      toast.loading(
-        `Mempersiapkan ${selectedItemsForPrint.length} ${printDialogType === 'qr' ? 'QR code' : 'barcode'} untuk cetak...`
-      );
+      toast.loading(`Mempersiapkan ${selectedJenis.length} QR code untuk cetak...`);
 
-      if (printDialogType === 'qr') {
-        // Print QR jenis barang
-        const selectedJenis = jenisBarangList.filter(j =>
-          selectedItemsForPrint.includes(j.id_jenis_barang)
+      // Build list of tiles
+      type Tile = {
+        w: number;
+        h: number;
+        src: string;
+        label: string;
+      };
+
+      const tiles: Tile[] = [];
+
+      // Generate QR images (8x10 cm)
+      for (const jenis of selectedJenis) {
+        const dataUrl = await createSimpleLabelDataURL(
+          jenis.kode_jenis_barang,
+          jenis.nama_jenis_barang,
+          { width: 800, height: 1000 }
         );
-
-        const qrDataUrls: Array<{ kode: string; nama: string; dataUrl: string }> = [];
-        for (const jenis of selectedJenis) {
-          try {
-            const dataUrl = await createSimpleLabelDataURL(
-              jenis.kode_jenis_barang,
-              jenis.nama_jenis_barang,
-              { width: 720, height: 900 } // 4:5 ratio (8cm width, 10cm height)
-            );
-            qrDataUrls.push({
-              kode: jenis.kode_jenis_barang,
-              nama: jenis.nama_jenis_barang,
-              dataUrl,
-            });
-          } catch (err) {
-            console.error(`Error QR ${jenis.kode_jenis_barang}:`, err);
-          }
-        }
-
-        if (qrDataUrls.length === 0) {
-          toast.dismiss();
-          toast.error("Gagal membuat QR code");
-          return;
-        }
-
-        const printWindow = window.open("", "_blank", "width=800,height=600");
-        if (!printWindow) {
-          toast.dismiss();
-          toast.error("Gagal membuka window cetak");
-          return;
-        }
-
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="utf-8" />
-              <title>Cetak QR Jenis Barang</title>
-              <style>
-                @page { size: A4; margin: 10mm; }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: Arial, sans-serif; background: white; }
-                .print-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5mm; padding: 0; }
-                .qr-item { border: 0.5px solid #333; padding: 3mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-inside: avoid; }
-                .qr-item img { width: 8cm; height: 10cm; object-fit: contain; }
-                @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-              </style>
-            </head>
-            <body>
-              <div class="print-container">
-                ${qrDataUrls.map(item => `<div class="qr-item"><img src="${item.dataUrl}" alt="${item.kode}" /></div>`).join('')}
-              </div>
-            </body>
-          </html>
-        `;
-
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-        printWindow.focus();
-        toast.dismiss();
-        toast.success("Siap cetak!");
-        setTimeout(() => printWindow.print(), 500);
-        setShowPrintDialog(false);
-      } else {
-        // Print barcode
-        const selectedBarang = barangList.filter(b =>
-          selectedItemsForPrint.includes(b.id || b.id_barang)
-        );
-
-        const barcodeDataUrls: Array<{ kode: string; nama: string; dataUrl: string }> = [];
-        for (const barang of selectedBarang) {
-          try {
-            const dataUrl = await createBarcodeDataURL(barang.kode_barang, {
-              width: 960,
-              height: 300,
-            });
-            barcodeDataUrls.push({
-              kode: barang.kode_barang,
-              nama: barang.nama_barang,
-              dataUrl,
-            });
-          } catch (err) {
-            console.error(`Error barcode ${barang.kode_barang}:`, err);
-          }
-        }
-
-        if (barcodeDataUrls.length === 0) {
-          toast.dismiss();
-          toast.error("Gagal membuat barcode");
-          return;
-        }
-
-        const printWindow = window.open("", "_blank", "width=800,height=600");
-        if (!printWindow) {
-          toast.dismiss();
-          toast.error("Gagal membuka window cetak");
-          return;
-        }
-
-        const htmlContent = `
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="utf-8" />
-              <title>Cetak Barcode</title>
-              <style>
-                @page { size: A4; margin: 10mm; }
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body { font-family: Arial, sans-serif; background: white; }
-                .print-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm; padding: 0; }
-                .barcode-item { border: 0.5px solid #333; padding: 3mm; display: flex; flex-direction: column; align-items: center; justify-content: center; page-break-inside: avoid; height: 2cm; }
-                .barcode-item img { width: 100%; height: 2cm; object-fit: contain; }
-                @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-              </style>
-            </head>
-            <body>
-              <div class="print-container">
-                ${barcodeDataUrls.map(item => `<div class="barcode-item"><img src="${item.dataUrl}" alt="${item.kode}" /></div>`).join('')}
-              </div>
-            </body>
-          </html>
-        `;
-
-        printWindow.document.write(htmlContent);
-        printWindow.document.close();
-        printWindow.focus();
-        toast.dismiss();
-        toast.success("Siap cetak!");
-        setTimeout(() => printWindow.print(), 500);
-        setShowPrintDialog(false);
+        tiles.push({ w: 8, h: 10, src: dataUrl, label: jenis.kode_jenis_barang });
       }
+
+      if (tiles.length === 0) {
+        toast.dismiss();
+        toast.error("Tidak ada QR yang bisa dicetak");
+        return;
+      }
+
+      // QR-only layout: 5 per A4 (2x2 + 1 rotated bottom centered)
+      const PAGE_W = 21.0;
+      const PAGE_H = 29.7;
+      const MARGIN = 0.3;
+      const USABLE_W = PAGE_W - MARGIN * 2;
+
+      const perPage = 5;
+      const pagesHtml: string[] = [];
+      
+      for (let i = 0; i < tiles.length; i += perPage) {
+        const batch = tiles.slice(i, i + perPage);
+        const htmlItems: string[] = [];
+        
+        // Center grid horizontally (grid width = 16cm for 2x8cm)
+        const gridW = 16;
+        const gridX = MARGIN + (USABLE_W - gridW) / 2;
+        
+        // Top 4: 2x2 of 8x10
+        const posTop = [
+          { x: gridX + 0, y: MARGIN + 0 },
+          { x: gridX + 8, y: MARGIN + 0 },
+          { x: gridX + 0, y: MARGIN + 10 },
+          { x: gridX + 8, y: MARGIN + 10 },
+        ];
+        
+        for (let k = 0; k < Math.min(4, batch.length); k++) {
+          const t = batch[k];
+          const style = `left:${posTop[k].x}cm;top:${posTop[k].y}cm;width:8cm;height:10cm;border:none;`;
+          htmlItems.push(`
+            <div class="tile" style="${style}">
+              <img src="${t.src}" alt="${t.label}" style="width:100%;height:100%;object-fit:contain;" />
+            </div>`);
+        }
+        
+        // Bottom rotated centered (if exists)
+        if (batch.length > 4) {
+          const t = batch[4];
+          const w = 10; // rotated width (physical space)
+          const h = 8;  // rotated height (physical space)
+          const x = MARGIN + (USABLE_W - w) / 2;
+          const y = MARGIN + 20; // below top grid
+          const style = `left:${x}cm;top:${y}cm;width:${w}cm;height:${h}cm;border:none;`;
+          const imgStyle = 'transform: rotate(90deg); width: 8cm; height: 10cm;';
+          htmlItems.push(`
+            <div class="tile" style="${style}">
+              <img src="${t.src}" alt="${t.label}" style="${imgStyle}" />
+            </div>`);
+        }
+        
+        pagesHtml.push(`<div class="page">${htmlItems.join('')}</div>`);
+      }
+
+      const printWindow = window.open("", "_blank", "width=1000,height=800");
+      if (!printWindow) {
+        toast.dismiss();
+        toast.error("Gagal membuka window cetak");
+        return;
+      }
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Cetak QR Code</title>
+            <style>
+              @page { size: A4; margin: 3mm; }
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              html, body { height: 100%; }
+              body { background: white; }
+              .page { position: relative; width: 21cm; height: 29.7cm; page-break-after: always; overflow: hidden; }
+              .tile { position: absolute; display: flex; align-items: center; justify-content: center; }
+              .tile img { display: block; }
+              @media print { 
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+              }
+            </style>
+          </head>
+          <body>
+            ${pagesHtml.join('\n')}
+          </body>
+        </html>`;
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      toast.dismiss();
+      toast.success("Siap cetak!");
+      setTimeout(() => printWindow.print(), 600);
+      setShowQRPrintDialog(false);
     } catch (error) {
       console.error("Error printing:", error);
       toast.dismiss();
@@ -723,41 +705,170 @@ const Items = () => {
     }
   };
 
-  // Open unified print dialog
-  const openPrintDialog = (type: 'qr' | 'barcode') => {
-    if (type === 'qr' && jenisBarangList.length === 0) {
-      toast.error("Tidak ada jenis barang");
-      return;
-    }
-    if (type === 'barcode' && barangList.length === 0) {
-      toast.error("Tidak ada barang");
+  // ===== BARCODE PRINT HANDLER (Barcode-only) =====
+  const handleBarcodePrint = async () => {
+    if (selectedBarcodeForPrint.length === 0) {
+      toast.error("Pilih minimal 1 barcode untuk dicetak");
       return;
     }
 
-    setPrintDialogType(type);
-    setSelectedItemsForPrint(
-      type === 'qr'
-        ? jenisBarangList.map(j => j.id_jenis_barang)
-        : barangList.map(b => b.id || b.id_barang)
+    const selectedBarang = barangList.filter(b => 
+      selectedBarcodeForPrint.includes(b.id || b.id_barang)
     );
-    setPrintSearchQuery('');
-    setShowPrintDialog(true);
+
+    try {
+      toast.loading(`Mempersiapkan ${selectedBarang.length} barcode untuk cetak...`);
+
+      // Build list of tiles
+      type Tile = {
+        w: number;
+        h: number;
+        src: string;
+        label: string;
+      };
+
+      const tiles: Tile[] = [];
+
+      // Generate barcode images (7x2 cm)
+      for (const barang of selectedBarang) {
+        const dataUrl = await createBarcodeDataURL(barang.kode_barang, {
+          width: 700,
+          height: 200,
+          verticalScale: 0.6,
+        });
+        tiles.push({ w: 7, h: 2, src: dataUrl, label: barang.kode_barang });
+      }
+
+      if (tiles.length === 0) {
+        toast.dismiss();
+        toast.error("Tidak ada barcode yang bisa dicetak");
+        return;
+      }
+
+      // Barcode-only layout: 2 columns, multiple rows, centered
+      const PAGE_W = 21.0;
+      const PAGE_H = 29.7;
+      const MARGIN = 0.3;
+      const USABLE_W = PAGE_W - MARGIN * 2;
+      const USABLE_H = PAGE_H - MARGIN * 2;
+
+      const cols = 2;
+      const barcodeW = 7;
+      const barcodeH = 2;
+      const vGap = 0; // no vertical gap
+      const gridW = cols * barcodeW;
+      const gridX = MARGIN + (USABLE_W - gridW) / 2;
+      const rowsPerPage = Math.floor(USABLE_H / (barcodeH + vGap));
+      const perPage = cols * rowsPerPage;
+
+      const pagesHtml: string[] = [];
+      
+      for (let i = 0; i < tiles.length; i += perPage) {
+        const batch = tiles.slice(i, i + perPage);
+        const htmlItems: string[] = [];
+        
+        for (let k = 0; k < batch.length; k++) {
+          const t = batch[k];
+          const col = k % cols;
+          const row = Math.floor(k / cols);
+          const x = gridX + col * barcodeW;
+          const y = MARGIN + row * (barcodeH + vGap);
+          const style = `left:${x}cm;top:${y}cm;width:${barcodeW}cm;height:${barcodeH}cm;border:none;`;
+          htmlItems.push(`
+            <div class="tile" style="${style}">
+              <img src="${t.src}" alt="${t.label}" style="width:100%;height:100%;object-fit:contain;" />
+            </div>`);
+        }
+        
+        pagesHtml.push(`<div class="page">${htmlItems.join('')}</div>`);
+      }
+
+      const printWindow = window.open("", "_blank", "width=1000,height=800");
+      if (!printWindow) {
+        toast.dismiss();
+        toast.error("Gagal membuka window cetak");
+        return;
+      }
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Cetak Barcode</title>
+            <style>
+              @page { size: A4; margin: 3mm; }
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              html, body { height: 100%; }
+              body { background: white; }
+              .page { position: relative; width: 21cm; height: 29.7cm; page-break-after: always; overflow: hidden; }
+              .tile { position: absolute; display: flex; align-items: center; justify-content: center; }
+              .tile img { display: block; }
+              @media print { 
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+              }
+            </style>
+          </head>
+          <body>
+            ${pagesHtml.join('\n')}
+          </body>
+        </html>`;
+
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      toast.dismiss();
+      toast.success("Siap cetak!");
+      setTimeout(() => printWindow.print(), 600);
+      setShowBarcodePrintDialog(false);
+    } catch (error) {
+      console.error("Error printing:", error);
+      toast.dismiss();
+      toast.error("Gagal mencetak");
+    }
   };
 
-  // Filter items for print dialog based on search query
-  const getFilteredItemsForPrint = () => {
-    const query = printSearchQuery.toLowerCase();
-    if (printDialogType === 'qr') {
-      return jenisBarangList.filter(j =>
-        j.nama_jenis_barang.toLowerCase().includes(query) ||
-        j.kode_jenis_barang.toLowerCase().includes(query)
-      );
-    } else {
-      return barangList.filter(b =>
-        b.nama_barang.toLowerCase().includes(query) ||
-        b.kode_barang.toLowerCase().includes(query)
-      );
+  // Open QR print dialog
+  const openQRPrintDialog = () => {
+    if (jenisBarangList.length === 0) {
+      toast.error("Tidak ada jenis barang untuk dicetak");
+      return;
     }
+    // Default: select all
+    setSelectedQRForPrint(jenisBarangList.map(j => j.id_jenis_barang));
+    setQRPrintSearchQuery('');
+    setShowQRPrintDialog(true);
+  };
+
+  // Open Barcode print dialog
+  const openBarcodePrintDialog = () => {
+    if (barangList.length === 0) {
+      toast.error("Tidak ada barang untuk dicetak");
+      return;
+    }
+    // Default: select all
+    setSelectedBarcodeForPrint(barangList.map(b => (b.id || b.id_barang)));
+    setBarcodePrintSearchQuery('');
+    setShowBarcodePrintDialog(true);
+  };
+
+  // Filter QR items
+  const getFilteredQRForPrint = () => {
+    const query = qrPrintSearchQuery.toLowerCase();
+    return jenisBarangList.filter(j =>
+      j.nama_jenis_barang.toLowerCase().includes(query) ||
+      j.kode_jenis_barang.toLowerCase().includes(query)
+    );
+  };
+
+  // Filter Barcode items
+  const getFilteredBarcodeForPrint = () => {
+    const query = barcodePrintSearchQuery.toLowerCase();
+    return barangList.filter(b =>
+      b.nama_barang.toLowerCase().includes(query) ||
+      b.kode_barang.toLowerCase().includes(query)
+    );
   };
 
   // Legacy: Print selected QR jenis to A4 (kept for backward compatibility)
@@ -1919,9 +2030,13 @@ const Items = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => openPrintDialog('qr')} className="gap-2">
-                  <Printer className="h-4 w-4" />
-                  Cetak QR & Barcode
+                <DropdownMenuItem onClick={() => openQRPrintDialog()} className="gap-2">
+                  <QrCode className="h-4 w-4" />
+                  Cetak QR Code
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openBarcodePrintDialog()} className="gap-2">
+                  <Barcode className="h-4 w-4" />
+                  Cetak Barcode
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={openQRJenisSelectionDialog} className="gap-2">
                   <Download className="h-4 w-4" />
@@ -3183,208 +3298,237 @@ const Items = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Unified Print Dialog for QR & Barcode */}
-        <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
+        {/* QR Print Dialog */}
+        <Dialog open={showQRPrintDialog} onOpenChange={setShowQRPrintDialog}>
           <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Cetak QR & Barcode</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <QrCode className="h-5 w-5" />
+                Cetak QR Code Jenis Barang
+              </DialogTitle>
               <DialogDescription>
-                Pilih jenis ({printDialogType === 'qr' ? 'cetak QR jenis barang' : 'cetak barcode barang'})
+                Pilih jenis barang yang ingin dicetak QR code-nya. Maksimal 5 QR per halaman A4.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              {/* Type selector */}
-              <div className="flex gap-2 p-3 bg-muted rounded-lg">
-                <label className="flex items-center gap-2 cursor-pointer flex-1 p-2 rounded hover:bg-muted-foreground/10 transition">
-                  <input
-                    type="radio"
-                    name="print-type"
-                    value="qr"
-                    checked={printDialogType === 'qr'}
-                    onChange={() => {
-                      setPrintDialogType('qr');
-                      setSelectedItemsForPrint(jenisBarangList.map(j => j.id_jenis_barang));
-                      setPrintSearchQuery('');
-                    }}
-                    className="h-4 w-4"
-                  />
-                  <QrCode className="h-4 w-4" />
-                  <span className="font-medium">QR Jenis Barang</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer flex-1 p-2 rounded hover:bg-muted-foreground/10 transition">
-                  <input
-                    type="radio"
-                    name="print-type"
-                    value="barcode"
-                    checked={printDialogType === 'barcode'}
-                    onChange={() => {
-                      setPrintDialogType('barcode');
-                      setSelectedItemsForPrint(barangList.map(b => b.id || b.id_barang));
-                      setPrintSearchQuery('');
-                    }}
-                    className="h-4 w-4"
-                  />
-                  <Barcode className="h-4 w-4" />
-                  <span className="font-medium">Barcode Barang</span>
-                </label>
-              </div>
-
               {/* Search input */}
               <Input
-                placeholder={`Cari ${printDialogType === 'qr' ? 'jenis barang' : 'barang'}...`}
-                value={printSearchQuery}
-                onChange={(e) => setPrintSearchQuery(e.target.value)}
+                placeholder={"Cari jenis barang..."}
+                value={qrPrintSearchQuery}
+                onChange={(e) => setQRPrintSearchQuery(e.target.value)}
                 className="w-full"
               />
 
-              {/* Select all checkbox */}
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="select-all-print"
-                    checked={
-                      selectedItemsForPrint.length === getFilteredItemsForPrint().length &&
-                      getFilteredItemsForPrint().length > 0
-                    }
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedItemsForPrint(
-                          getFilteredItemsForPrint().map(item =>
-                            printDialogType === 'qr'
-                              ? (item as any).id_jenis_barang
-                              : item.id || (item as any).id_barang
-                          )
-                        );
-                      } else {
-                        setSelectedItemsForPrint([]);
-                      }
-                    }}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <label htmlFor="select-all-print" className="font-semibold cursor-pointer">
-                    Pilih Semua ({getFilteredItemsForPrint().length}{' '}
-                    {printDialogType === 'qr' ? 'jenis barang' : 'barang'})
-                  </label>
-                </div>
-                <span className="text-sm text-muted-foreground">
-                  {selectedItemsForPrint.length} terpilih
-                </span>
-              </div>
+              {/* Select all */}
+              {(() => {
+                const filtered = getFilteredQRForPrint();
+                const allSelected = filtered.length > 0 && filtered.every(j => selectedQRForPrint.includes(j.id_jenis_barang));
+                const toggleAll = (checked: boolean) => {
+                  if (checked) {
+                    setSelectedQRForPrint(filtered.map(j => j.id_jenis_barang));
+                  } else {
+                    setSelectedQRForPrint([]);
+                  }
+                };
+                return (
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="select-all-qr-print"
+                        checked={allSelected}
+                        onChange={(e) => toggleAll(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <label htmlFor="select-all-qr-print" className="font-semibold cursor-pointer">
+                        Pilih Semua ({filtered.length} jenis)
+                      </label>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {selectedQRForPrint.length} terpilih
+                    </span>
+                  </div>
+                );
+              })()}
 
-              {/* Items list */}
+              {/* QR items list */}
               <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-                {printDialogType === 'qr'
-                  ? (getFilteredItemsForPrint() as any[]).map((jenis) => {
-                      const itemCount = barangList.filter(
-                        (b) => b.id_jenis_barang === jenis.id_jenis_barang
-                      ).length;
-
-                      return (
-                        <div
-                          key={jenis.id_jenis_barang}
-                          className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
-                          onClick={() => {
-                            if (selectedItemsForPrint.includes(jenis.id_jenis_barang)) {
-                              setSelectedItemsForPrint(
-                                selectedItemsForPrint.filter(id => id !== jenis.id_jenis_barang)
-                              );
-                            } else {
-                              setSelectedItemsForPrint([...selectedItemsForPrint, jenis.id_jenis_barang]);
-                            }
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedItemsForPrint.includes(jenis.id_jenis_barang)}
-                            onChange={() => {}}
-                            onClick={(e) => e.stopPropagation()}
-                            className="h-4 w-4 rounded border-gray-300"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <code className="bg-muted px-2 py-1 rounded text-xs font-semibold text-primary">
-                                {jenis.kode_jenis_barang}
-                              </code>
-                              <span className="font-medium">{jenis.nama_jenis_barang}</span>
-                            </div>
-                            {jenis.deskripsi_jenis_barang && (
-                              <div className="text-xs text-muted-foreground mt-1">
-                                {jenis.deskripsi_jenis_barang}
-                              </div>
-                            )}
-                          </div>
-                          <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
-                            {itemCount} item
-                          </span>
+                {getFilteredQRForPrint().map((jenis) => {
+                  const selected = selectedQRForPrint.includes(jenis.id_jenis_barang);
+                  const itemCount = barangList.filter((b) => b.id_jenis_barang === jenis.id_jenis_barang).length;
+                  return (
+                    <div
+                      key={jenis.id_jenis_barang}
+                      className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                      onClick={() => {
+                        if (selected) {
+                          setSelectedQRForPrint(selectedQRForPrint.filter(id => id !== jenis.id_jenis_barang));
+                        } else {
+                          setSelectedQRForPrint([...selectedQRForPrint, jenis.id_jenis_barang]);
+                        }
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => {}}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <code className="bg-muted px-2 py-1 rounded text-xs font-semibold text-primary">{jenis.kode_jenis_barang}</code>
+                          <span className="font-medium">{jenis.nama_jenis_barang}</span>
                         </div>
-                      );
-                    })
-                  : (getFilteredItemsForPrint() as any[]).map((barang) => (
-                      <div
-                        key={barang.id || barang.id_barang}
-                        className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
-                        onClick={() => {
-                          const barangId = barang.id || barang.id_barang;
-                          if (selectedItemsForPrint.includes(barangId)) {
-                            setSelectedItemsForPrint(
-                              selectedItemsForPrint.filter(id => id !== barangId)
-                            );
-                          } else {
-                            setSelectedItemsForPrint([...selectedItemsForPrint, barangId]);
-                          }
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedItemsForPrint.includes(barang.id || barang.id_barang)}
-                          onChange={() => {}}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                        {barang.foto_barang && (
-                          <img
-                            src={getPhotoUrl(barang.foto_barang, API_BASE_URL)}
-                            alt={barang.nama_barang}
-                            className="w-12 h-12 object-cover rounded"
-                          />
-                        )}
-                        <div className="flex-1">
-                          <div className="font-medium">{barang.nama_barang}</div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {barang.kode_barang}
-                          </div>
-                        </div>
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-semibold ${
-                            barang.status === "Tersedia"
-                              ? "bg-green-100 text-green-700"
-                              : barang.status === "Dipinjam"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {barang.status}
-                        </span>
                       </div>
-                    ))}
+                      <span className="inline-flex items-center justify-center px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                        {itemCount} item
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Action buttons */}
               <div className="flex gap-2 justify-end pt-4 border-t">
                 <Button
                   variant="outline"
-                  onClick={() => setShowPrintDialog(false)}
+                  onClick={() => setShowQRPrintDialog(false)}
                 >
                   Batal
                 </Button>
                 <Button
-                  onClick={handleUnifiedPrint}
-                  disabled={selectedItemsForPrint.length === 0}
+                  onClick={handleQRPrint}
+                  disabled={selectedQRForPrint.length === 0}
                   className="gap-2"
                 >
                   <Printer className="h-4 w-4" />
-                  Cetak {selectedItemsForPrint.length} {printDialogType === 'qr' ? 'QR Code' : 'Barcode'}
+                  Cetak {selectedQRForPrint.length} QR Code
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Barcode Print Dialog */}
+        <Dialog open={showBarcodePrintDialog} onOpenChange={setShowBarcodePrintDialog}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Barcode className="h-5 w-5" />
+                Cetak Barcode Barang
+              </DialogTitle>
+              <DialogDescription>
+                Pilih barang yang ingin dicetak barcode-nya. 2 kolom per halaman A4.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Search input */}
+              <Input
+                placeholder={"Cari barang..."}
+                value={barcodePrintSearchQuery}
+                onChange={(e) => setBarcodePrintSearchQuery(e.target.value)}
+                className="w-full"
+              />
+
+              {/* Select all */}
+              {(() => {
+                const filtered = getFilteredBarcodeForPrint();
+                const allSelected = filtered.length > 0 && filtered.every(b => selectedBarcodeForPrint.includes(b.id || b.id_barang));
+                const toggleAll = (checked: boolean) => {
+                  if (checked) {
+                    setSelectedBarcodeForPrint(filtered.map(b => b.id || b.id_barang));
+                  } else {
+                    setSelectedBarcodeForPrint([]);
+                  }
+                };
+                return (
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="select-all-barcode-print"
+                        checked={allSelected}
+                        onChange={(e) => toggleAll(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <label htmlFor="select-all-barcode-print" className="font-semibold cursor-pointer">
+                        Pilih Semua ({filtered.length} barang)
+                      </label>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {selectedBarcodeForPrint.length} terpilih
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Barcode items list */}
+              <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                {getFilteredBarcodeForPrint().map((barang) => {
+                  const barangId = barang.id || barang.id_barang;
+                  const selected = selectedBarcodeForPrint.includes(barangId);
+                  return (
+                    <div
+                      key={barangId}
+                      className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                      onClick={() => {
+                        if (selected) {
+                          setSelectedBarcodeForPrint(selectedBarcodeForPrint.filter(id => id !== barangId));
+                        } else {
+                          setSelectedBarcodeForPrint([...selectedBarcodeForPrint, barangId]);
+                        }
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => {}}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      {barang.foto_barang && (
+                        <img
+                          src={getPhotoUrl(barang.foto_barang, API_BASE_URL)}
+                          alt={barang.nama_barang}
+                          className="w-12 h-12 object-cover rounded"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <div className="font-medium">{barang.nama_barang}</div>
+                        <div className="text-xs text-muted-foreground font-mono">{barang.kode_barang}</div>
+                      </div>
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-semibold ${
+                          barang.status === "Tersedia"
+                            ? "bg-green-100 text-green-700"
+                            : barang.status === "Dipinjam"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {barang.status}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 justify-end pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowBarcodePrintDialog(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  onClick={handleBarcodePrint}
+                  disabled={selectedBarcodeForPrint.length === 0}
+                  className="gap-2"
+                >
+                  <Printer className="h-4 w-4" />
+                  Cetak {selectedBarcodeForPrint.length} Barcode
                 </Button>
               </div>
             </div>

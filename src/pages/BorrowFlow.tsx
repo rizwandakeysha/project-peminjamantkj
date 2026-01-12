@@ -118,6 +118,7 @@ const BorrowFlow = () => {
   const [availableItems, setAvailableItems] = useState<BarangData[]>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [selectedItem, setSelectedItem] = useState<BarangData | null>(null);
+  const [searchBarang, setSearchBarang] = useState<string>("");
 
   // Form step state
   const [borrowerRole, setBorrowerRole] = useState<"guru" | "siswa">("guru");
@@ -150,6 +151,7 @@ const BorrowFlow = () => {
   const kelasTriggerRef = useRef<HTMLButtonElement | null>(null);
   const namaTriggerRef = useRef<HTMLButtonElement | null>(null);
   const guruTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const searchBarangRef = useRef<HTMLInputElement | null>(null);
 
   // Summary state
   const [borrowingCode, setBorrowingCode] = useState<string>("");
@@ -281,6 +283,16 @@ const BorrowFlow = () => {
     }
   }, [currentStep, scanMode]);
 
+  // Auto-focus search barang input after QR scan
+  useEffect(() => {
+    if (currentStep === "form" && availableItems.length > 0) {
+      const timer = setTimeout(() => {
+        searchBarangRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [currentStep, availableItems]);
+
   const handleQRScan = useCallback(
     async (decodedText: string) => {
       try {
@@ -315,6 +327,7 @@ const BorrowFlow = () => {
             setAvailableItems(availableByJenis);
             setSelectedItem(null);
             setSelectedItemIds([]);
+            setSearchBarang("");
             setCurrentStep("form");
             toast.success(
               `${availableByJenis.length} barang tersedia untuk jenis "${scannedCode}"`
@@ -349,6 +362,7 @@ const BorrowFlow = () => {
           setSelectedJenisCode(barangByKode.kode_jenis || null);
           setAvailableItems([]);
           setSelectedItemIds([]);
+          setSearchBarang("");
           setFormData({
             nama_peminjam: "",
             kontak: "",
@@ -681,7 +695,47 @@ const BorrowFlow = () => {
                           </div>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-3">
-                          {availableItems.map((item) => {
+                          {/* Search input for barang */}
+                          <div className="col-span-full mb-4">
+                            <div className="flex gap-2">
+                              <Input
+                                ref={searchBarangRef}
+                                placeholder="Cari barang dengan kode atau nama..."
+                                value={searchBarang}
+                                onChange={(e) => setSearchBarang(e.target.value)}
+                                className="flex-1"
+                              />
+                              {searchBarang && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setSearchBarang("")}
+                                >
+                                  Hapus
+                                </Button>
+                              )}
+                            </div>
+                            {searchBarang && (
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Ditemukan {availableItems.filter((item) =>
+                                  item.kode_barang.toLowerCase().includes(searchBarang.toLowerCase()) ||
+                                  item.nama_barang.toLowerCase().includes(searchBarang.toLowerCase())
+                                ).length} barang
+                              </p>
+                            )}
+                          </div>
+                          
+                          {/* Filtered items */}
+                          {availableItems
+                            .filter((item) =>
+                              item.kode_barang.toLowerCase().includes(searchBarang.toLowerCase()) ||
+                              item.nama_barang.toLowerCase().includes(searchBarang.toLowerCase())
+                            )
+                            .sort((a, b) => 
+                              a.kode_barang.localeCompare(b.kode_barang)
+                            )
+                            .map((item) => {
                             const isSelected = selectedItemIds.includes(item.id);
                             return (
                               <div

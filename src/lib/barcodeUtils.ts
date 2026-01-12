@@ -130,6 +130,12 @@ export const createBarcodeDataURL = async (
   ctx.font = `600 ${barFontSize}px Poppins, Arial, sans-serif`; // Font proporsional
   ctx.fillText(code, W / 2, textY);
 
+  // Outline border (~0.5pt ≈ 2px at current scale)
+  const borderPx = 2;
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = borderPx;
+  ctx.strokeRect(borderPx / 2, borderPx / 2, W - borderPx, H - borderPx);
+
   return canvas.toDataURL("image/png");
 };
 
