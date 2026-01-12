@@ -64,7 +64,7 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_URL || 
   "https://tkj-peminjaman-server-production.up.railway.app/api";
 
-type Step = "scan" | "form" | "photo" | "summary";
+type Step = "form" | "cart" | "photo" | "summary";
 
 interface BarangData extends Item {
   id_jenis_barang?: number;
@@ -99,7 +99,7 @@ const ALLOWED_GURU_PENDAMPING = [
 const BorrowFlow = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<Step>("scan");
+  const [currentStep, setCurrentStep] = useState<Step>("form");
   const [cameraUnavailable, setCameraUnavailable] = useState<boolean>(false);
   const [cameraChecked, setCameraChecked] = useState<boolean>(false);
   // Default to scanner fisik/keyboard; kamera QR opsional
@@ -111,7 +111,10 @@ const BorrowFlow = () => {
   const [allSiswa, setAllSiswa] = useState<SiswaData[]>([]);
   const [allKelas, setAllKelas] = useState<string[]>([]);
 
-  // Scan step state
+  // Shopping Cart state - multiple items
+  const [cart, setCart] = useState<BarangData[]>([]);
+
+  // Cart/scan step state
   const [selectedJenisCode, setSelectedJenisCode] = useState<string | null>(
     null
   );
@@ -119,6 +122,8 @@ const BorrowFlow = () => {
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [selectedItem, setSelectedItem] = useState<BarangData | null>(null);
   const [searchBarang, setSearchBarang] = useState<string>("");
+  const [showDetailDialog, setShowDetailDialog] = useState<boolean>(false);
+  const [detailDialogItem, setDetailDialogItem] = useState<BarangData | null>(null);
 
   // Form step state
   const [borrowerRole, setBorrowerRole] = useState<"guru" | "siswa">("guru");
@@ -274,7 +279,7 @@ const BorrowFlow = () => {
 
   // Auto-focus manual input so scanner fisik langsung siap ketik di kotak input
   useEffect(() => {
-    if (currentStep === "scan" && scanMode === "manual") {
+    if (currentStep === "cart" && scanMode === "manual") {
       const timer = setTimeout(() => {
         manualInputRef.current?.focus();
         manualInputRef.current?.select();
@@ -285,13 +290,73 @@ const BorrowFlow = () => {
 
   // Auto-focus search barang input after QR scan
   useEffect(() => {
-    if (currentStep === "form" && availableItems.length > 0) {
+    if (currentStep === "cart" && availableItems.length > 0) {
       const timer = setTimeout(() => {
         searchBarangRef.current?.focus();
       }, 100);
       return () => clearTimeout(timer);
     }
   }, [currentStep, availableItems]);
+
+  // Cart management functions
+  const addToCart = (item: BarangData) => {
+    // Check if item already in cart
+    if (cart.some(i => (i.id || i.id_barang) === (item.id || item.id_barang))) {
+      toast.error("Barang sudah ada di keranjang");
+      return;
+    }
+    setCart([...cart, item]);
+    toast.success(`${item.nama_barang} ditambahkan ke keranjang`);
+  };
+
+  const removeFromCart = (itemId: number) => {
+    const item = cart.find(i => (i.id || i.id_barang) === itemId);
+    setCart(cart.filter(i => (i.id || i.id_barang) !== itemId));
+    if (item) {
+      toast.success(`${item.nama_barang} dihapus dari keranjang`);
+    }
+  };
+
+  const clearCart = () => {
+    setCart([]);
+    toast.success("Keranjang dikosongkan");
+  };
+
+  const handleAddSelectedToCart = () => {
+    if (availableItems.length > 0) {
+      // Multiple items selection mode
+      if (selectedItemIds.length === 0) {
+        toast.error("Pilih minimal satu barang");
+        return;
+      }
+      const itemsToAdd = availableItems.filter(item => 
+        selectedItemIds.includes(item.id || item.id_barang || 0)
+      );
+      itemsToAdd.forEach(item => {
+        if (!cart.some(i => (i.id || i.id_barang) === (item.id || item.id_barang))) {
+          addToCart(item);
+        }
+      });
+      // Reset selection
+      setSelectedItemIds([]);
+      setAvailableItems([]);
+      setSelectedJenisCode(null);
+      setSearchBarang("");
+    } else if (selectedItem) {
+      // Single item mode
+      addToCart(selectedItem);
+      setSelectedItem(null);
+      setSelectedJenisCode(null);
+    }
+  };
+
+  const handleContinueToPhoto = () => {
+    if (cart.length === 0) {
+      toast.error("Keranjang kosong! Scan minimal 1 barang");
+      return;
+    }
+    setCurrentStep("photo");
+  };
 
   const handleQRScan = useCallback(
     async (decodedText: string) => {
@@ -328,7 +393,6 @@ const BorrowFlow = () => {
             setSelectedItem(null);
             setSelectedItemIds([]);
             setSearchBarang("");
-            setCurrentStep("form");
             toast.success(
               `${availableByJenis.length} barang tersedia untuk jenis "${scannedCode}"`
             );
@@ -363,13 +427,6 @@ const BorrowFlow = () => {
           setAvailableItems([]);
           setSelectedItemIds([]);
           setSearchBarang("");
-          setFormData({
-            nama_peminjam: "",
-            kontak: "",
-            keperluan: "",
-            guru_pendamping: "",
-          });
-          setCurrentStep("form");
           toast.success(`Barang "${barangByKode.nama_barang}" dipilih`);
           return;
         }
@@ -421,19 +478,8 @@ const BorrowFlow = () => {
       return;
     }
 
-    if (availableItems.length > 0) {
-      if (selectedItemIds.length === 0) {
-        toast.error("Pilih minimal satu barang");
-        return;
-      }
-    } else {
-      if (!selectedItem) {
-        toast.error("Barang belum dipilih");
-        return;
-      }
-    }
-
-    setCurrentStep("photo");
+    // Move to cart step to scan items
+    setCurrentStep("cart");
   };
 
   const handlePhotoCapture = async (imageData: string) => {
@@ -445,17 +491,13 @@ const BorrowFlow = () => {
   const handleSubmitBorrowing = async (photoDataToSubmit: string) => {
     setIsSubmitting(true);
     try {
-      // Prepare items array
-      let itemsToBorrow: Array<{ id_barang: number }> = [];
-
-      if (availableItems.length > 0) {
-        itemsToBorrow = selectedItemIds.map((id) => ({ id_barang: id }));
-      } else if (selectedItem) {
-        itemsToBorrow = [{ id_barang: selectedItem.id }];
-      }
+      // Prepare items array from cart
+      const itemsToBorrow = cart.map((item) => ({ 
+        id_barang: item.id || item.id_barang || 0 
+      }));
 
       if (itemsToBorrow.length === 0) {
-        toast.error("Tidak ada barang yang dipilih");
+        toast.error("Keranjang kosong! Tidak ada barang yang dipilih");
         setIsSubmitting(false);
         return;
       }
@@ -529,8 +571,8 @@ const BorrowFlow = () => {
 
   const renderStepIndicator = () => {
     const steps = [
-      { id: "scan", label: "Scan/Pilih Barang", icon: QrCode },
-      { id: "form", label: "Isi Data", icon: FileText },
+      { id: "form", label: "Data Peminjam", icon: FileText },
+      { id: "cart", label: "Pilih Barang", icon: QrCode },
       { id: "photo", label: "Ambil Foto", icon: Camera },
       { id: "summary", label: "Selesai", icon: CheckCircle },
     ];
@@ -576,7 +618,7 @@ const BorrowFlow = () => {
 
   return (
     <PublicLayout>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-7xl mx-auto px-2 sm:px-4">
         <Button variant="ghost" onClick={() => navigate("/")} className="mb-6">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Kembali ke Beranda
@@ -589,590 +631,55 @@ const BorrowFlow = () => {
 
         {renderStepIndicator()}
 
-        {/* Step: Scan */}
-        {currentStep === "scan" && (
+        {/* Step 1: Form - Data Peminjam (AWAL) */}
+        {currentStep === "form" && (
           <Card>
-            <CardHeader className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <CardTitle>Scan Barang</CardTitle>
-                <div className="flex items-center gap-2 bg-white/60 backdrop-blur px-3 py-2 rounded-xl border border-border">
-                  <div className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-sm font-medium text-foreground">
-                    {scanMode === "qr" ? "Kamera siap" : "Scanner fisik siap"}
-                  </span>
-                </div>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {scanMode === "qr" ? "Mode: Kamera QR" : "Mode: Scanner Fisik / Manual"}
-              </div>
+            <CardHeader>
+              <CardTitle>Data Peminjam</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Isi identitas peminjam terlebih dahulu sebelum memilih barang
+              </p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Button
-                  variant={scanMode === "manual" ? "default" : "outline"}
-                  onClick={() => setScanMode("manual")}
-                >
-                  Scanner Fisik / Manual (disarankan)
-                </Button>
-                <Button
-                  variant={scanMode === "qr" ? "default" : "outline"}
-                  onClick={() => setScanMode("qr")}
-                >
-                  Kamera QR
-                </Button>
-              </div>
-
-              {!cameraChecked && scanMode === "qr" ? (
-                <div className="rounded-2xl border p-6 text-center">
-                  <div className="animate-pulse space-y-2">
-                    <div className="h-8 w-8 mx-auto bg-muted rounded-full" />
-                    <p className="text-sm text-muted-foreground">Memeriksa kamera...</p>
-                  </div>
-                </div>
-              ) : scanMode === "qr" ? (
-                <div className="rounded-2xl border p-4">
-                  <QRScanner
-                    key="qr-scanner"
-                    onScanSuccess={handleQRScan}
-                    onClose={() => navigate("/")}
-                    onUnavailable={() => {
-                      setCameraUnavailable(true);
-                      setScanMode("manual");
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="rounded-2xl border p-4 space-y-4">
+            <CardContent>
+              <form onSubmit={handleFormSubmit} className="space-y-4">
+                {/* Role Selection */}
+                <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="manual-code">Kode Barang atau Jenis</Label>
-                    <Input
-                      id="manual-code"
-                      placeholder="Contoh: TKJ-LAPT"
-                      className="mt-1"
-                      ref={manualInputRef}
-                      onKeyPress={(e) => e.key === "Enter" && handleManualCode()}
-                    />
-                  </div>
-                  <Button onClick={handleManualCode} className="w-full">
-                    Cari Barang
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step: Form */}
-        {currentStep === "form" &&
-          (selectedItem || availableItems.length > 0) && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Data Peminjaman</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleFormSubmit} className="space-y-4">
-                  {/* Item Info */}
-                  <div className="bg-accent/50 p-4 rounded-lg mb-4">
-                    {availableItems.length > 0 ? (
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <p className="font-semibold">Jenis: {selectedJenisCode}</p>
-                            <p className="text-sm text-muted-foreground">Pilih barang dari daftar</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary">Dipilih: {selectedItemIds.length}</Badge>
-                            {selectedItemIds.length > 0 && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setSelectedItemIds([])}
-                              >
-                                Bersihkan Pilihan
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mt-3">
-                          {/* Search input for barang */}
-                          <div className="col-span-full mb-4">
-                            <div className="flex gap-2">
-                              <Input
-                                ref={searchBarangRef}
-                                placeholder="Cari barang dengan kode atau nama..."
-                                value={searchBarang}
-                                onChange={(e) => setSearchBarang(e.target.value)}
-                                className="flex-1"
-                              />
-                              {searchBarang && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => setSearchBarang("")}
-                                >
-                                  Hapus
-                                </Button>
-                              )}
-                            </div>
-                            {searchBarang && (
-                              <p className="text-xs text-muted-foreground mt-2">
-                                Ditemukan {availableItems.filter((item) =>
-                                  item.kode_barang.toLowerCase().includes(searchBarang.toLowerCase()) ||
-                                  item.nama_barang.toLowerCase().includes(searchBarang.toLowerCase())
-                                ).length} barang
-                              </p>
-                            )}
-                          </div>
-                          
-                          {/* Filtered items */}
-                          {availableItems
-                            .filter((item) =>
-                              item.kode_barang.toLowerCase().includes(searchBarang.toLowerCase()) ||
-                              item.nama_barang.toLowerCase().includes(searchBarang.toLowerCase())
-                            )
-                            .sort((a, b) => 
-                              a.kode_barang.localeCompare(b.kode_barang)
-                            )
-                            .map((item) => {
-                            const isSelected = selectedItemIds.includes(item.id);
-                            return (
-                              <div
-                                key={item.id}
-                                className={`relative group rounded-xl border overflow-hidden bg-card hover:shadow-lg transition-shadow ${
-                                  isSelected ? "ring-2 ring-primary border-primary/30" : ""
-                                }`}
-                              >
-                                <div
-                                  className="absolute z-10 top-2 left-2 bg-white/80 backdrop-blur px-2 py-1 rounded-md text-xs font-medium border"
-                                >
-                                  {item.kode_barang}
-                                </div>
-                                <div className="aspect-video relative bg-muted">
-                                  {item.foto_barang ? (
-                                    <img
-                                      src={getPhotoUrl(item.foto_barang, API_BASE_URL)}
-                                      alt={item.nama_barang}
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                    />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-muted-foreground/40 text-sm">
-                                      Tidak ada foto
-                                    </div>
-                                  )}
-                                  {isSelected && (
-                                    <div className="absolute inset-0 bg-primary/10" />
-                                  )}
-                                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/30 via-transparent to-transparent" />
-                                  <div className="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="backdrop-blur bg-white/80"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDetailItem(item);
-                                      }}
-                                    >
-                                      Detail
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="flex-1"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedItemIds((prev) =>
-                                          prev.includes(item.id)
-                                            ? prev.filter((id) => id !== item.id)
-                                            : [...prev, item.id]
-                                        );
-                                      }}
-                                    >
-                                      {isSelected ? "Batalkan" : "Pilih"}
-                                    </Button>
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSelectedItemIds((prev) =>
-                                      prev.includes(item.id)
-                                        ? prev.filter((id) => id !== item.id)
-                                        : [...prev, item.id]
-                                    )
-                                  }
-                                  className="w-full text-left p-3"
-                                >
-                                  <div className="font-medium line-clamp-1">{item.nama_barang}</div>
-                                  <div className="text-xs text-muted-foreground">{item.nama_jenis || "-"}</div>
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Detail Dialog */}
-                        <Dialog open={!!detailItem} onOpenChange={(open) => !open && setDetailItem(null)}>
-                          <DialogContent className="max-w-2xl">
-                            {detailItem && (
-                              <>
-                                <DialogHeader>
-                                  <DialogTitle className="line-clamp-2">{detailItem.nama_barang}</DialogTitle>
-                                  <DialogDescription>Kode: {detailItem.kode_barang}</DialogDescription>
-                                </DialogHeader>
-                                <div className="grid gap-4">
-                                  <div className="w-full">
-                                    {detailItem.foto_barang ? (
-                                      <img
-                                        src={getPhotoUrl(detailItem.foto_barang, API_BASE_URL)}
-                                        alt={detailItem.nama_barang}
-                                        className="w-full max-h-[60vh] object-contain rounded-md border"
-                                      />
-                                    ) : (
-                                      <div className="w-full h-64 flex items-center justify-center bg-muted rounded-md border">
-                                        <span className="text-muted-foreground">Tidak ada foto</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Status</span>
-                                      <span className="font-medium">{detailItem.status}</span>
-                                    </div>
-                                    {detailItem.nama_jenis && (
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Jenis</span>
-                                        <span className="font-medium">{detailItem.nama_jenis}</span>
-                                      </div>
-                                    )}
-                                    {detailItem.kode_jenis && (
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">Kode Jenis</span>
-                                        <span className="font-medium">{detailItem.kode_jenis}</span>
-                                      </div>
-                                    )}
-                                    {detailItem.no_serial_number && (
-                                      <div className="flex justify-between">
-                                        <span className="text-muted-foreground">No. Seri</span>
-                                        <span className="font-medium font-mono">{detailItem.no_serial_number}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {detailItem.deskripsi_barang && (
-                                    <div className="text-sm">
-                                      <span className="text-muted-foreground block">Deskripsi</span>
-                                      <p className="mt-1">{detailItem.deskripsi_barang}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </>
-                            )}
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-3">
-                        {selectedItem?.foto_barang && (
-                          <img
-                            src={getPhotoUrl(selectedItem.foto_barang, API_BASE_URL)}
-                            alt={selectedItem.nama_barang}
-                            className="w-16 h-16 object-cover rounded"
-                          />
-                        )}
-                        <div>
-                          <p className="font-semibold">
-                            {selectedItem?.nama_barang}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Kode: {selectedItem?.kode_barang}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Role Selection */}
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="role">Meminjam sebagai *</Label>
-                      <Select
-                        value={borrowerRole}
-                        onValueChange={(value: any) => {
-                          setBorrowerRole(value);
-                          setFormData({
-                            ...formData,
-                            nama_peminjam: "",
-                            guru_pendamping: "",
-                          });
-                          setSelectedKelas("");
-                        }}
-                      >
-                        <SelectTrigger className="mt-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="guru">Guru</SelectItem>
-                          <SelectItem value="siswa">Siswa</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {borrowerRole === "siswa" && (
-                      <div>
-                        <Label htmlFor="kelas">Kelas *</Label>
-                        <Popover open={openKelas} onOpenChange={setOpenKelas}>
-                          <PopoverTrigger asChild>
-                            <Button
-                              ref={kelasTriggerRef}
-                              variant="outline"
-                              role="combobox"
-                              className="mt-1 w-full justify-between"
-                            >
-                              {selectedKelas || "Pilih Kelas..."}
-                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            side="bottom"
-                            align="start"
-                            sideOffset={4}
-                            className="p-0"
-                            style={{ width: kelasTriggerRef.current?.offsetWidth }}
-                          >
-                            <Command>
-                              <CommandInput
-                                placeholder="Cari kelas..."
-                                value={searchKelas}
-                                onValueChange={setSearchKelas}
-                              />
-                              <CommandEmpty>Tidak ada kelas</CommandEmpty>
-                              <div className="max-h-44 overflow-y-auto">
-                                {allKelas
-                                  .filter((k) =>
-                                    k
-                                      .toLowerCase()
-                                      .includes(searchKelas.toLowerCase())
-                                  )
-                                  .map((k) => (
-                                    <CommandItem
-                                      key={k}
-                                      value={k}
-                                      onSelect={() => {
-                                        setSelectedKelas(k);
-                                        setOpenKelas(false);
-                                        setSearchKelas("");
-                                      }}
-                                    >
-                                      <Check
-                                        className={cn(
-                                          "mr-2 h-4 w-4",
-                                          selectedKelas === k
-                                            ? "opacity-100"
-                                            : "opacity-0"
-                                        )}
-                                      />
-                                      {k}
-                                    </CommandItem>
-                                  ))}
-                              </div>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    )}
-
-                    <div>
-                      <Label htmlFor="nama">Nama Peminjam *</Label>
-                      <Popover
-                        open={openNamaPeminjam}
-                        onOpenChange={setOpenNamaPeminjam}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            ref={namaTriggerRef}
-                            id="nama"
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={openNamaPeminjam}
-                            className="mt-1 w-full justify-between"
-                          >
-                            {formData.nama_peminjam ? (
-                              <BorrowerLabel
-                                label={formData.nama_peminjam}
-                                role={borrowerRole}
-                              />
-                            ) : borrowerRole === "guru" ? (
-                              "Pilih Guru..."
-                            ) : (
-                              "Pilih Siswa..."
-                            )}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          side="bottom"
-                          align="start"
-                          sideOffset={4}
-                          className="p-0"
-                          style={{ width: namaTriggerRef.current?.offsetWidth }}
-                        >
-                          <Command>
-                            <CommandInput
-                              placeholder={
-                                borrowerRole === "guru"
-                                  ? "Cari guru..."
-                                  : "Cari siswa..."
-                              }
-                              value={searchNamaPeminjam}
-                              onValueChange={setSearchNamaPeminjam}
-                            />
-                            <CommandEmpty>
-                              Tidak ada data ditemukan
-                            </CommandEmpty>
-                            <div className="max-h-64 overflow-y-auto">
-                              {borrowerRole === "guru"
-                                ? allGuru
-                                    .filter((t) =>
-                                      formatTeacherDisplay(t)
-                                        .toLowerCase()
-                                        .includes(
-                                          searchNamaPeminjam.toLowerCase()
-                                        )
-                                    )
-                                    .map((t) => (
-                                      <CommandItem
-                                        key={t.id || t.nip}
-                                        value={formatTeacherDisplay(t)}
-                                        onSelect={(currentValue) => {
-                                          setFormData({
-                                            ...formData,
-                                            nama_peminjam:
-                                              currentValue ===
-                                              formData.nama_peminjam
-                                                ? ""
-                                                : currentValue,
-                                          });
-                                          setOpenNamaPeminjam(false);
-                                          setSearchNamaPeminjam("");
-                                        }}
-                                      >
-                                        <Check
-                                          className={cn(
-                                            "mr-2 h-4 w-4",
-                                            formData.nama_peminjam ===
-                                              formatTeacherDisplay(t)
-                                              ? "opacity-100"
-                                              : "opacity-0"
-                                          )}
-                                        />
-                                        <BorrowerLabel
-                                          label={formatTeacherDisplay(t)}
-                                          role="guru"
-                                        />
-                                      </CommandItem>
-                                    ))
-                                : allSiswa
-                                    .filter(
-                                      (s) =>
-                                        (selectedKelas === "" ||
-                                          s.kelas === selectedKelas) &&
-                                        formatStudentDisplay(s)
-                                          .toLowerCase()
-                                          .includes(
-                                            searchNamaPeminjam.toLowerCase()
-                                          )
-                                    )
-                                    .map((s) => (
-                                      <CommandItem
-                                        key={s.id || s.nis}
-                                        value={formatStudentDisplay(s)}
-                                        onSelect={(currentValue) => {
-                                          setFormData({
-                                            ...formData,
-                                            nama_peminjam:
-                                              currentValue ===
-                                              formData.nama_peminjam
-                                                ? ""
-                                                : currentValue,
-                                          });
-                                          setOpenNamaPeminjam(false);
-                                          setSearchNamaPeminjam("");
-                                        }}
-                                      >
-                                        <Check
-                                          className={cn(
-                                            "mr-2 h-4 w-4",
-                                            formData.nama_peminjam ===
-                                              formatStudentDisplay(s)
-                                              ? "opacity-100"
-                                              : "opacity-0"
-                                          )}
-                                        />
-                                        <BorrowerLabel
-                                          label={formatStudentDisplay(s)}
-                                          role="siswa"
-                                        />
-                                      </CommandItem>
-                                    ))}
-                            </div>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div>
-                      <Label htmlFor="kontak">Nomor Kontak (WA) *</Label>
-                      <Input
-                        id="kontak"
-                        type="tel"
-                        value={formData.kontak}
-                        onChange={(e) =>
-                          setFormData({ ...formData, kontak: e.target.value })
-                        }
-                        placeholder="08xxxxxxxxxx"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="keperluan">Keperluan *</Label>
-                    <Textarea
-                      id="keperluan"
-                      value={formData.keperluan}
-                      onChange={(e) =>
-                        setFormData({ ...formData, keperluan: e.target.value })
-                      }
-                      placeholder="Contoh: Praktikum Jaringan Komputer"
-                      className="mt-1"
-                      required
-                    />
+                    <Label htmlFor="role">Meminjam sebagai *</Label>
+                    <Select
+                      value={borrowerRole}
+                      onValueChange={(value: any) => {
+                        setBorrowerRole(value);
+                        setFormData({
+                          ...formData,
+                          nama_peminjam: "",
+                          guru_pendamping: "",
+                        });
+                        setSelectedKelas("");
+                      }}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="guru">Guru</SelectItem>
+                        <SelectItem value="siswa">Siswa</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {borrowerRole === "siswa" && (
                     <div>
-                      <Label htmlFor="guru">Guru Pendamping *</Label>
-                      <Popover
-                        open={openGuruPendamping}
-                        onOpenChange={setOpenGuruPendamping}
-                      >
+                      <Label htmlFor="kelas">Kelas *</Label>
+                      <Popover open={openKelas} onOpenChange={setOpenKelas}>
                         <PopoverTrigger asChild>
                           <Button
-                            ref={guruTriggerRef}
+                            ref={kelasTriggerRef}
                             variant="outline"
                             role="combobox"
                             className="mt-1 w-full justify-between"
                           >
-                            {formData.guru_pendamping ? (
-                              <BorrowerLabel
-                                label={formData.guru_pendamping}
-                                role="guru"
-                              />
-                            ) : (
-                              "Pilih Guru..."
-                            )}
+                            {selectedKelas || "Pilih Kelas..."}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
@@ -1181,55 +688,41 @@ const BorrowFlow = () => {
                           align="start"
                           sideOffset={4}
                           className="p-0"
-                          style={{ width: guruTriggerRef.current?.offsetWidth }}
+                          style={{ width: kelasTriggerRef.current?.offsetWidth }}
                         >
                           <Command>
                             <CommandInput
-                              placeholder="Cari guru..."
-                              value={searchGuruPendamping}
-                              onValueChange={setSearchGuruPendamping}
+                              placeholder="Cari kelas..."
+                              value={searchKelas}
+                              onValueChange={setSearchKelas}
                             />
-                            <CommandEmpty>Tidak ada guru</CommandEmpty>
-                            <div className="max-h-64 overflow-y-auto">
-                              {allGuru
-                                .filter((g) =>
-                                  ALLOWED_GURU_PENDAMPING.some((allowed) =>
-                                    g.name.toLowerCase().includes(allowed)
-                                  )
-                                )
-                                .filter((t) =>
-                                  formatTeacherDisplay(t)
+                            <CommandEmpty>Tidak ada kelas</CommandEmpty>
+                            <div className="max-h-44 overflow-y-auto">
+                              {allKelas
+                                .filter((k) =>
+                                  k
                                     .toLowerCase()
-                                    .includes(
-                                      searchGuruPendamping.toLowerCase()
-                                    )
+                                    .includes(searchKelas.toLowerCase())
                                 )
-                                .map((g) => (
+                                .map((k) => (
                                   <CommandItem
-                                    key={g.id || g.nip}
-                                    value={formatTeacherDisplay(g)}
-                                    onSelect={(currentValue) => {
-                                      setFormData({
-                                        ...formData,
-                                        guru_pendamping: currentValue,
-                                      });
-                                      setOpenGuruPendamping(false);
-                                      setSearchGuruPendamping("");
+                                    key={k}
+                                    value={k}
+                                    onSelect={() => {
+                                      setSelectedKelas(k);
+                                      setOpenKelas(false);
+                                      setSearchKelas("");
                                     }}
                                   >
                                     <Check
                                       className={cn(
                                         "mr-2 h-4 w-4",
-                                        formData.guru_pendamping ===
-                                          formatTeacherDisplay(g)
+                                        selectedKelas === k
                                           ? "opacity-100"
                                           : "opacity-0"
                                       )}
                                     />
-                                    <BorrowerLabel
-                                      label={formatTeacherDisplay(g)}
-                                      role="guru"
-                                    />
+                                    {k}
                                   </CommandItem>
                                 ))}
                             </div>
@@ -1239,55 +732,642 @@ const BorrowFlow = () => {
                     </div>
                   )}
 
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setCurrentStep("scan");
-                        setSelectedItem(null);
-                        setAvailableItems([]);
-                        setSelectedItemIds([]);
-                        lastScanRef.current = { code: "", time: 0 };
-                      }}
+                  <div>
+                    <Label htmlFor="nama">Nama Peminjam *</Label>
+                    <Popover
+                      open={openNamaPeminjam}
+                      onOpenChange={setOpenNamaPeminjam}
                     >
-                      <ArrowLeft className="h-4 w-4 mr-2" />
-                      Kembali
-                    </Button>
-                    <Button type="submit" className="flex-1">
-                      Selanjutnya
-                      <ArrowRight className="h-4 w-4 ml-2" />
-                    </Button>
+                      <PopoverTrigger asChild>
+                        <Button
+                          ref={namaTriggerRef}
+                          id="nama"
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={openNamaPeminjam}
+                          className="mt-1 w-full justify-between"
+                        >
+                          {formData.nama_peminjam ? (
+                            <BorrowerLabel
+                              label={formData.nama_peminjam}
+                              role={borrowerRole}
+                            />
+                          ) : borrowerRole === "guru" ? (
+                            "Pilih Guru..."
+                          ) : (
+                            "Pilih Siswa..."
+                          )}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="bottom"
+                        align="start"
+                        sideOffset={4}
+                        className="p-0"
+                        style={{ width: namaTriggerRef.current?.offsetWidth }}
+                      >
+                        <Command>
+                          <CommandInput
+                            placeholder={
+                              borrowerRole === "guru"
+                                ? "Cari guru..."
+                                : "Cari siswa..."
+                            }
+                            value={searchNamaPeminjam}
+                            onValueChange={setSearchNamaPeminjam}
+                          />
+                          <CommandEmpty>
+                            Tidak ada data ditemukan
+                          </CommandEmpty>
+                          <div className="max-h-64 overflow-y-auto">
+                            {borrowerRole === "guru"
+                              ? allGuru
+                                  .filter((t) =>
+                                    formatTeacherDisplay(t)
+                                      .toLowerCase()
+                                      .includes(
+                                        searchNamaPeminjam.toLowerCase()
+                                      )
+                                  )
+                                  .map((t) => (
+                                    <CommandItem
+                                      key={t.id || t.nip}
+                                      value={formatTeacherDisplay(t)}
+                                      onSelect={(currentValue) => {
+                                        setFormData({
+                                          ...formData,
+                                          nama_peminjam:
+                                            currentValue ===
+                                            formData.nama_peminjam
+                                              ? ""
+                                              : currentValue,
+                                        });
+                                        setOpenNamaPeminjam(false);
+                                        setSearchNamaPeminjam("");
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          formData.nama_peminjam ===
+                                            formatTeacherDisplay(t)
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                        )}
+                                      />
+                                      <BorrowerLabel
+                                        label={formatTeacherDisplay(t)}
+                                        role="guru"
+                                      />
+                                    </CommandItem>
+                                  ))
+                              : allSiswa
+                                  .filter(
+                                    (s) =>
+                                      (selectedKelas === "" ||
+                                        s.kelas === selectedKelas) &&
+                                      formatStudentDisplay(s)
+                                        .toLowerCase()
+                                        .includes(
+                                          searchNamaPeminjam.toLowerCase()
+                                        )
+                                  )
+                                  .map((s) => (
+                                    <CommandItem
+                                      key={s.id || s.nis}
+                                      value={formatStudentDisplay(s)}
+                                      onSelect={(currentValue) => {
+                                        setFormData({
+                                          ...formData,
+                                          nama_peminjam:
+                                            currentValue ===
+                                            formData.nama_peminjam
+                                              ? ""
+                                              : currentValue,
+                                        });
+                                        setOpenNamaPeminjam(false);
+                                        setSearchNamaPeminjam("");
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          formData.nama_peminjam ===
+                                            formatStudentDisplay(s)
+                                            ? "opacity-100"
+                                            : "opacity-0"
+                                        )}
+                                      />
+                                      <BorrowerLabel
+                                        label={formatStudentDisplay(s)}
+                                        role="siswa"
+                                      />
+                                    </CommandItem>
+                                  ))}
+                          </div>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                </form>
+                  <div>
+                    <Label htmlFor="kontak">Nomor Kontak (WA) *</Label>
+                    <Input
+                      id="kontak"
+                      type="tel"
+                      value={formData.kontak}
+                      onChange={(e) =>
+                        setFormData({ ...formData, kontak: e.target.value })
+                      }
+                      placeholder="08xxxxxxxxxx"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="keperluan">Keperluan *</Label>
+                  <Textarea
+                    id="keperluan"
+                    value={formData.keperluan}
+                    onChange={(e) =>
+                      setFormData({ ...formData, keperluan: e.target.value })
+                    }
+                    placeholder="Contoh: Praktikum Jaringan Komputer"
+                    className="mt-1"
+                    required
+                  />
+                </div>
+
+                {borrowerRole === "siswa" && (
+                  <div>
+                    <Label htmlFor="guru">Guru Pendamping *</Label>
+                    <Popover
+                      open={openGuruPendamping}
+                      onOpenChange={setOpenGuruPendamping}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          ref={guruTriggerRef}
+                          variant="outline"
+                          role="combobox"
+                          className="mt-1 w-full justify-between"
+                        >
+                          {formData.guru_pendamping ? (
+                            <BorrowerLabel
+                              label={formData.guru_pendamping}
+                              role="guru"
+                            />
+                          ) : (
+                            "Pilih Guru..."
+                          )}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        side="bottom"
+                        align="start"
+                        sideOffset={4}
+                        className="p-0"
+                        style={{ width: guruTriggerRef.current?.offsetWidth }}
+                      >
+                        <Command>
+                          <CommandInput
+                            placeholder="Cari guru..."
+                            value={searchGuruPendamping}
+                            onValueChange={setSearchGuruPendamping}
+                          />
+                          <CommandEmpty>Tidak ada guru</CommandEmpty>
+                          <div className="max-h-64 overflow-y-auto">
+                            {allGuru
+                              .filter((g) =>
+                                ALLOWED_GURU_PENDAMPING.some((allowed) =>
+                                  g.name.toLowerCase().includes(allowed)
+                                )
+                              )
+                              .filter((t) =>
+                                formatTeacherDisplay(t)
+                                  .toLowerCase()
+                                  .includes(
+                                    searchGuruPendamping.toLowerCase()
+                                  )
+                              )
+                              .map((g) => (
+                                <CommandItem
+                                  key={g.id || g.nip}
+                                  value={formatTeacherDisplay(g)}
+                                  onSelect={(currentValue) => {
+                                    setFormData({
+                                      ...formData,
+                                      guru_pendamping: currentValue,
+                                    });
+                                    setOpenGuruPendamping(false);
+                                    setSearchGuruPendamping("");
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      formData.guru_pendamping ===
+                                        formatTeacherDisplay(g)
+                                        ? "opacity-100"
+                                        : "opacity-0"
+                                    )}
+                                  />
+                                  <BorrowerLabel
+                                    label={formatTeacherDisplay(g)}
+                                    role="guru"
+                                  />
+                                </CommandItem>
+                              ))}
+                          </div>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4">
+                  <Button type="submit" className="flex-1">
+                    Lanjut ke Keranjang
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+              </form>
               </CardContent>
             </Card>
           )}
 
-        {/* Step: Photo */}
+        {/* Step 2: Cart - Shopping Cart dengan Scan */}
+        {currentStep === "cart" && (
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mx-auto px-2">
+            {/* Main Content - Scan Area */}
+            <div className="lg:col-span-3 space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Scan/Pilih Barang</CardTitle>
+                    <Badge variant="secondary">{cart.length} item di keranjang</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Scan QR code atau masukkan kode barang. Anda bisa menambah beberapa barang sekaligus.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Scan Mode Toggle */}
+                  <div className="flex gap-2">
+                    <Button
+                      variant={scanMode === "manual" ? "default" : "outline"}
+                      onClick={() => setScanMode("manual")}
+                      size="sm"
+                    >
+                      Scanner Fisik / Manual
+                    </Button>
+                    {!cameraUnavailable && (
+                      <Button
+                        variant={scanMode === "qr" ? "default" : "outline"}
+                        onClick={() => setScanMode("qr")}
+                        size="sm"
+                      >
+                        Kamera QR
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Scan Interface */}
+                  {scanMode === "qr" ? (
+                    <div className="rounded-2xl border p-4">
+                      <QRScanner
+                        key="qr-scanner-cart"
+                        onScanSuccess={handleQRScan}
+                        onClose={() => {}}
+                        onUnavailable={() => {
+                          setCameraUnavailable(true);
+                          setScanMode("manual");
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border p-4 space-y-3">
+                      <Label htmlFor="manual-code">Kode Barang atau Jenis</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="manual-code"
+                          placeholder="Contoh: TKJ-LAPT"
+                          ref={manualInputRef}
+                          onKeyPress={(e) => e.key === "Enter" && handleManualCode()}
+                        />
+                        <Button onClick={handleManualCode}>
+                          Cari
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Available Items Selection (jika ada) */}
+                  {availableItems.length > 0 && (
+                    <div className="space-y-3 mt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold">Jenis: {selectedJenisCode}</h3>
+                          <p className="text-sm text-muted-foreground">{availableItems.length} barang tersedia</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setAvailableItems([]);
+                            setSelectedJenisCode(null);
+                            setSelectedItemIds([]);
+                            setSearchBarang("");
+                          }}
+                        >
+                          Ganti Jenis / Scan Lagi
+                        </Button>
+                      </div>
+
+                      {/* Search */}
+                      <Input
+                        ref={searchBarangRef}
+                        placeholder="Cari barang..."
+                        value={searchBarang}
+                        onChange={(e) => setSearchBarang(e.target.value)}
+                      />
+
+                      {/* Items Grid with Hover Detail/Select */}
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
+                        {availableItems
+                          .filter((item) =>
+                            item.kode_barang.toLowerCase().includes(searchBarang.toLowerCase()) ||
+                            item.nama_barang.toLowerCase().includes(searchBarang.toLowerCase())
+                          )
+                          .map((item) => {
+                            const isInCart = cart.some(i => (i.id || i.id_barang) === (item.id || item.id_barang));
+                            return (
+                              <div
+                                key={item.id || item.id_barang}
+                                className="relative rounded-lg border overflow-hidden group cursor-pointer transition-all hover:shadow-lg"
+                              >
+                                {/* Item Image */}
+                                {item.foto_barang && (
+                                  <img
+                                    src={getPhotoUrl(item.foto_barang, API_BASE_URL)}
+                                    alt={item.nama_barang}
+                                    className="w-full h-24 object-cover"
+                                  />
+                                )}
+                                
+                                {/* Item Name and Code - Always Visible */}
+                                <div className="p-2 text-center text-xs bg-card">
+                                  <p className="font-medium line-clamp-1">{item.nama_barang}</p>
+                                  <p className="text-muted-foreground text-xs line-clamp-1">{item.kode_barang}</p>
+                                </div>
+
+                                {/* Hover Overlay with Detail/Select Buttons */}
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    className="w-full text-xs"
+                                    onClick={() => {
+                                      setDetailDialogItem(item);
+                                      setShowDetailDialog(true);
+                                    }}
+                                  >
+                                    Detail
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="w-full text-xs"
+                                    disabled={isInCart}
+                                    onClick={() => {
+                                      if (isInCart) {
+                                        toast.error("Sudah ada di keranjang");
+                                      } else {
+                                        addToCart(item);
+                                      }
+                                    }}
+                                  >
+                                    {isInCart ? "Di Keranjang" : "Pilih"}
+                                  </Button>
+                                </div>
+
+                                {/* Overlay if already in cart */}
+                                {isInCart && (
+                                  <div className="absolute inset-0 bg-background/70 flex items-center justify-center rounded-lg">
+                                    <Badge variant="secondary" className="text-xs">Di Keranjang</Badge>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detail Dialog */}
+                  <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+                    <DialogContent className="max-w-2xl">
+                      {detailDialogItem && (
+                        <>
+                          <DialogHeader>
+                            <DialogTitle className="line-clamp-2">{detailDialogItem.nama_barang}</DialogTitle>
+                            <DialogDescription>Kode: {detailDialogItem.kode_barang}</DialogDescription>
+                          </DialogHeader>
+                          <div className="grid gap-4">
+                            {/* Gambar */}
+                            <div className="w-full">
+                              {detailDialogItem.foto_barang ? (
+                                <img
+                                  src={getPhotoUrl(detailDialogItem.foto_barang, API_BASE_URL)}
+                                  alt={detailDialogItem.nama_barang}
+                                  className="w-full max-h-[60vh] object-contain rounded-md border"
+                                />
+                              ) : (
+                                <div className="w-full h-64 flex items-center justify-center bg-muted rounded-md border">
+                                  <span className="text-muted-foreground">Tidak ada foto</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Data Barang */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Status</span>
+                                <span className="font-medium">{detailDialogItem.status}</span>
+                              </div>
+                              {detailDialogItem.nama_jenis && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Jenis</span>
+                                  <span className="font-medium">{detailDialogItem.nama_jenis}</span>
+                                </div>
+                              )}
+                              {detailDialogItem.kode_jenis && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Kode Jenis</span>
+                                  <span className="font-medium">{detailDialogItem.kode_jenis}</span>
+                                </div>
+                              )}
+                              {detailDialogItem.no_serial_number && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">No. Seri</span>
+                                  <span className="font-medium font-mono">{detailDialogItem.no_serial_number}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Deskripsi */}
+                            {detailDialogItem.deskripsi_barang && (
+                              <div className="text-sm">
+                                <span className="text-muted-foreground block">Deskripsi</span>
+                                <p className="mt-1">{detailDialogItem.deskripsi_barang}</p>
+                              </div>
+                            )}
+
+                            {/* Tombol Pilih */}
+                            <Button 
+                              onClick={() => {
+                                const isInCart = cart.some(i => (i.id || i.id_barang) === (detailDialogItem.id || detailDialogItem.id_barang));
+                                if (isInCart) {
+                                  toast.error("Sudah ada di keranjang");
+                                } else {
+                                  addToCart(detailDialogItem);
+                                  setShowDetailDialog(false);
+                                }
+                              }}
+                              disabled={cart.some(i => (i.id || i.id_barang) === (detailDialogItem.id || detailDialogItem.id_barang))}
+                              className="w-full"
+                            >
+                              Pilih Barang Ini
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </DialogContent>
+                  </Dialog>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Sidebar - Cart Panel */}
+            <div className="lg:col-span-1">
+              <Card className="sticky top-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    🛒 Keranjang
+                    <Badge>{cart.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {cart.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-sm">Keranjang kosong</p>
+                      <p className="text-xs mt-2">Scan/pilih barang untuk meminjam</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {cart.map((item, index) => (
+                          <div
+                            key={item.id || item.id_barang}
+                            className="flex flex-col gap-1 p-2 border rounded-lg bg-card hover:bg-accent/50 transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-muted-foreground font-medium">{item.nama_jenis || "—"}</p>
+                                <p className="text-sm font-medium line-clamp-1">{item.nama_barang}</p>
+                                <p className="text-xs text-muted-foreground font-mono">{item.kode_barang}</p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeFromCart(item.id || item.id_barang || 0)}
+                                className="flex-shrink-0 h-6 w-6 p-0"
+                              >
+                                ×
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="pt-4 border-t space-y-2">
+                        <Button onClick={clearCart} variant="outline" className="w-full" size="sm">
+                          Kosongkan Keranjang
+                        </Button>
+                        <Button onClick={handleContinueToPhoto} className="w-full">
+                          Lanjut Foto ({cart.length} item)
+                          <ArrowRight className="h-4 w-4 ml-2" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          onClick={() => setCurrentStep("form")} 
+                          className="w-full"
+                          size="sm"
+                        >
+                          <ArrowLeft className="h-4 w-4 mr-2" />
+                          Kembali
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Photo */}
         {currentStep === "photo" && (
           <Card>
             <CardHeader>
               <CardTitle>Foto Barang</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Total: {cart.length} barang akan dipinjam
+              </p>
             </CardHeader>
             <CardContent className="space-y-4">
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Ambil foto yang jelas menampilkan barang yang dipinjam.
+                  Ambil foto yang jelas menampilkan semua barang yang dipinjam.
                 </AlertDescription>
               </Alert>
-              <div className="rounded-2xl border p-4">
-                <CameraCapture
-                  onCapture={handlePhotoCapture}
-                  label="Foto Barang"
-                  isSubmitting={isSubmitting}
-                />
+
+              <div className="grid lg:grid-cols-2 gap-4 items-start">
+                {/* Cart Summary */}
+                <div className="bg-muted p-4 rounded-lg space-y-3">
+                  <h3 className="font-semibold text-sm">Barang yang dipinjam</h3>
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {cart.map((item) => (
+                      <div
+                        key={item.id || item.id_barang}
+                        className="flex flex-col gap-0.5 rounded-md border bg-card px-3 py-2"
+                      >
+                        <span className="text-xs text-muted-foreground font-medium">
+                          {item.nama_jenis || "—"}
+                        </span>
+                        <span className="text-sm font-semibold line-clamp-1">{item.nama_barang}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{item.kode_barang}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border p-4">
+                  <CameraCapture
+                    onCapture={handlePhotoCapture}
+                    label="Foto Barang"
+                    isSubmitting={isSubmitting}
+                  />
+                </div>
               </div>
+
               <Button
                 variant="outline"
-                onClick={() => setCurrentStep("form")}
+                onClick={() => setCurrentStep("cart")}
                 className="w-full"
+                disabled={isSubmitting}
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Kembali
@@ -1296,7 +1376,7 @@ const BorrowFlow = () => {
           </Card>
         )}
 
-        {/* Step: Summary */}
+        {/* Step 4: Summary */}
         {currentStep === "summary" && (
           <Card>
             <CardHeader>
@@ -1377,45 +1457,28 @@ const BorrowFlow = () => {
                           Kode
                         </th>
                         <th className="text-center py-2 px-2 font-semibold">
-                          Jumlah
+                          Jenis
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {availableItems.length > 0
-                        ? availableItems
-                            .filter((item) => selectedItemIds.includes(item.id))
-                            .map((item, index) => (
-                              <tr
-                                key={item.id}
-                                className="border-b border-gray-200 hover:bg-gray-50"
-                              >
-                                <td className="py-2 px-2">{index + 1}</td>
-                                <td className="py-2 px-2 font-medium">
-                                  {item.nama_barang}
-                                </td>
-                                <td className="py-2 px-2 text-gray-600">
-                                  {item.kode_barang}
-                                </td>
-                                <td className="py-2 px-2 text-center font-medium">
-                                  1
-                                </td>
-                              </tr>
-                            ))
-                        : selectedItem && (
-                            <tr className="border-b border-gray-200 hover:bg-gray-50">
-                              <td className="py-2 px-2">1</td>
-                              <td className="py-2 px-2 font-medium">
-                                {selectedItem.nama_barang}
-                              </td>
-                              <td className="py-2 px-2 text-gray-600">
-                                {selectedItem.kode_barang}
-                              </td>
-                              <td className="py-2 px-2 text-center font-medium">
-                                1
-                              </td>
-                            </tr>
-                          )}
+                      {cart.map((item, index) => (
+                        <tr
+                          key={item.id || item.id_barang}
+                          className="border-b border-gray-200 hover:bg-gray-50"
+                        >
+                          <td className="py-2 px-2">{index + 1}</td>
+                          <td className="py-2 px-2 font-medium">
+                            {item.nama_barang}
+                          </td>
+                          <td className="py-2 px-2 text-gray-600">
+                            {item.kode_barang}
+                          </td>
+                          <td className="py-2 px-2 text-center text-xs">
+                            {item.nama_jenis || "—"}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
