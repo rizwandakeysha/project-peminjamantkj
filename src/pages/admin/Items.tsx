@@ -135,14 +135,46 @@ const ensureUniqueKodeJenis = (
 // Helper function to generate kode_barang from kode_jenis (AAAA-1, AAAA-2, etc)
 const generateKodeBarang = (
   kodeJenis: string,
-  barangListForJenis: any[]
+  barangListForJenis: Array<{ kode_barang?: string }>
 ): string => {
-  // Count existing barang for this jenis with same kode prefix
-  const prefix = kodeJenis.split("-").pop() || kodeJenis; // Get AAAA part
-  const count = barangListForJenis.filter((b) =>
-    b.kode_barang?.startsWith(prefix)
-  ).length;
-  return `${prefix}-${count + 1}`;
+  const prefix = (kodeJenis.split("-").pop() || kodeJenis).toUpperCase();
+  const usedNumbers = new Set<number>();
+
+  barangListForJenis.forEach((b) => {
+    const kode = (b.kode_barang || "").toUpperCase();
+    if (!kode.startsWith(prefix)) return;
+
+    const parts = kode.split("-");
+    const lastPart = parts[parts.length - 1];
+    const num = parseInt(lastPart, 10);
+    if (!Number.isNaN(num)) {
+      usedNumbers.add(num);
+    }
+  });
+
+  let nextNumber = 1;
+  while (usedNumbers.has(nextNumber)) {
+    nextNumber += 1;
+  }
+
+  return `${prefix}-${nextNumber}`;
+};
+
+// Merge barang lists and deduplicate by kode_barang (case-insensitive)
+const mergeBarangByKode = (...lists: Array<Array<{ kode_barang?: string }>>): any[] => {
+  const seen = new Set<string>();
+  const merged: any[] = [];
+
+  for (const list of lists) {
+    for (const item of list) {
+      const kode = (item.kode_barang || "").toUpperCase();
+      if (kode && seen.has(kode)) continue;
+      if (kode) seen.add(kode);
+      merged.push(item);
+    }
+  }
+
+  return merged;
 };
 
 const Items = () => {
@@ -1433,13 +1465,40 @@ const Items = () => {
         toast.success("Barang berhasil diupdate!");
       } else {
         // Create barang via API with auto-generated kode_barang
+        if (!selectedJenisId) {
+          toast.error("Pilih jenis barang terlebih dahulu");
+          return;
+        }
+
         const jenisBarang = jenisBarangList.find(
           (j) => j.id_jenis_barang === selectedJenisId
         );
-        const kodeJenis = jenisBarang?.kode_jenis_barang || "";
-        const barangForJenis = barangList.filter(
-          (b) => b.id_jenis_barang === selectedJenisId
+        const kodeJenis =
+          jenisBarang?.kode_jenis_barang || jenisBarang?.kode_jenis || "";
+
+        if (!kodeJenis) {
+          toast.error("Kode jenis barang tidak ditemukan");
+          return;
+        }
+
+        const localBarangForJenis = barangList.filter(
+          (b) =>
+            (b as any).id_jenis_barang === selectedJenisId ||
+            (b as any).id_jenis === selectedJenisId
         );
+
+        let barangForJenis = localBarangForJenis;
+
+        try {
+          const latestBarang = await barangAPI.getByJenis(kodeJenis);
+          barangForJenis = mergeBarangByKode(latestBarang, localBarangForJenis);
+        } catch (err) {
+          console.error(
+            "Gagal mengambil daftar barang terbaru untuk kode jenis:",
+            err
+          );
+        }
+
         const generatedKode = generateKodeBarang(kodeJenis, barangForJenis);
 
         // Create barang without foto first if it's base64
@@ -1619,9 +1678,18 @@ const Items = () => {
       }
 
       const kodeJenis = jenisBarang.kode_jenis_barang || "";
-      const currentBarangForJenis = barangList.filter(
-        (b) => b.id_jenis_barang === selectedJenisId
+      let baseBarangForJenis = barangList.filter(
+        (b) =>
+          (b as any).id_jenis_barang === selectedJenisId ||
+          (b as any).id_jenis === selectedJenisId
       );
+
+      try {
+        const latestBarang = await barangAPI.getByJenis(kodeJenis);
+        baseBarangForJenis = mergeBarangByKode(latestBarang, baseBarangForJenis);
+      } catch (err) {
+        console.error("Gagal mengambil barang terbaru untuk import:", err);
+      }
 
       // Parse data rows
       const newBarang: any[] = [];
@@ -1629,7 +1697,7 @@ const Items = () => {
         const values = lines[i].split(",").map((v) => v.trim());
         if (values.length > 1 && values[namaIndex]) {
           // Auto-generate kode_barang
-          const barangForThisJenis = [...currentBarangForJenis, ...newBarang];
+          const barangForThisJenis = [...baseBarangForJenis, ...newBarang];
           const generatedKode = generateKodeBarang(
             kodeJenis,
             barangForThisJenis
@@ -1750,10 +1818,31 @@ const Items = () => {
 
         const kodeJenis =
           existingJenis?.kode_jenis_barang || generateKodeJenis(jenisNama);
+        let baseBarangForJenis: any[] = [];
 
-        const baseBarangForJenis = existingJenis
-          ? barangList.filter((b) => b.id_jenis_barang === existingJenis.id_jenis_barang)
-          : [];
+        if (existingJenis) {
+          const localBarangForJenis = barangList.filter(
+            (b) =>
+              (b as any).id_jenis_barang === existingJenis.id_jenis_barang ||
+              (b as any).id_jenis === existingJenis.id_jenis_barang
+          );
+
+          try {
+            const latestBarang = await barangAPI.getByJenis(
+              existingJenis.kode_jenis_barang || existingJenis.kode_jenis
+            );
+            baseBarangForJenis = mergeBarangByKode(
+              latestBarang,
+              localBarangForJenis
+            );
+          } catch (err) {
+            console.error(
+              "Gagal mengambil barang terbaru untuk jenis saat import:",
+              err
+            );
+            baseBarangForJenis = localBarangForJenis;
+          }
+        }
 
         const barangPreview: any[] = [];
 
@@ -1815,14 +1904,46 @@ const Items = () => {
 
     try {
       setLoading(true);
+      const jenisBarang = jenisBarangList.find(
+        (j) => j.id_jenis_barang === selectedJenisId
+      );
+
+      if (!jenisBarang) {
+        toast.error("Jenis barang tidak ditemukan untuk import");
+        return;
+      }
+
+      const kodeJenis =
+        jenisBarang.kode_jenis_barang || jenisBarang.kode_jenis || "";
+      let baseBarangForJenis = barangList.filter(
+        (b) =>
+          (b as any).id_jenis_barang === selectedJenisId ||
+          (b as any).id_jenis === selectedJenisId
+      );
+
+      if (!kodeJenis) {
+        toast.error("Kode jenis barang tidak valid untuk import");
+        return;
+      }
+
+      try {
+        const latestBarang = await barangAPI.getByJenis(kodeJenis);
+        baseBarangForJenis = mergeBarangByKode(latestBarang, baseBarangForJenis);
+      } catch (err) {
+        console.error("Gagal mengambil barang terbaru sebelum import:", err);
+      }
+
       const createdBarang: any[] = [];
 
       for (const barang of barangImportPreview) {
+        const kodeBarang = generateKodeBarang(kodeJenis, baseBarangForJenis);
         const payload = {
           ...barang,
           id_jenis_barang: selectedJenisId,
+          kode_barang: kodeBarang,
         };
         const created = await barangAPI.create(payload);
+        baseBarangForJenis.push({ kode_barang: kodeBarang });
         createdBarang.push(created);
       }
 
@@ -1882,14 +2003,51 @@ const Items = () => {
         }
 
         const jenisId = targetJenis.id_jenis_barang;
+        const kodeJenisTarget =
+          targetJenis.kode_jenis_barang || targetJenis.kode_jenis || "";
+
+        if (!kodeJenisTarget) {
+          toast.error(
+            `Kode jenis tidak ditemukan untuk ${targetJenis.nama_jenis_barang}`
+          );
+          continue;
+        }
+
+        let baseBarangForJenis: any[] = [];
+
+        const localBarangForJenis = barangList.filter(
+          (b) =>
+            (b as any).id_jenis_barang === jenisId ||
+            (b as any).id_jenis === jenisId
+        );
+
+        try {
+          const latestBarang = await barangAPI.getByJenis(kodeJenisTarget);
+          baseBarangForJenis = mergeBarangByKode(
+            latestBarang,
+            localBarangForJenis
+          );
+        } catch (err) {
+          console.error(
+            "Gagal mengambil barang terbaru untuk jenis sebelum import:",
+            err
+          );
+          baseBarangForJenis = localBarangForJenis;
+        }
 
         for (const barang of jenisPreview.barang) {
+          const kodeBarang = generateKodeBarang(
+            kodeJenisTarget,
+            baseBarangForJenis
+          );
           const payload = {
             ...barang,
             id_jenis_barang: jenisId,
+            kode_barang: kodeBarang,
           };
 
           const created = await barangAPI.create(payload);
+          baseBarangForJenis.push({ kode_barang: kodeBarang });
           createdBarang.push(created);
         }
       }

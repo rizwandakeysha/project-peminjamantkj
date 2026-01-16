@@ -235,6 +235,9 @@ const BorrowFlow = () => {
           });
         })(),
         nama_peminjam: receiptBorrowing.nama_peminjam || formData.nama_peminjam,
+        guru_pendamping:
+          receiptBorrowing.guru_pendamping ||
+          (borrowerRole === "siswa" ? formData.guru_pendamping : undefined),
         items: (receiptBorrowing.detail_peminjaman || []).map((d) => ({
           nama_barang: d.nama_barang || "(Barang)",
           kode_barang: d.kode_barang || "-",

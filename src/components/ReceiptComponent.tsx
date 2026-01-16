@@ -10,6 +10,7 @@ export type ReceiptData = {
   tanggal: string; // already formatted id-ID
   nama_peminjam: string;
   petugas?: string;
+  guru_pendamping?: string;
   details?: ReceiptItem[];
   items?: ReceiptItem[];
 };
@@ -30,7 +31,7 @@ export const ReceiptComponent = React.forwardRef<HTMLDivElement, { data: Receipt
       <div ref={ref} className="receipt58">
         <div className="receipt58__center">
           <div className="receipt58__title">SIMABAR SMART-INV</div>
-          <div className="receipt58__subtitle">SMKN 5 MALANG</div>
+          <div className="receipt58__subtitle">TJKT SMKN 5 MALANG</div>
         </div>
 
         <div className="receipt58__divider">{equalsLine()}</div>
@@ -42,6 +43,8 @@ export const ReceiptComponent = React.forwardRef<HTMLDivElement, { data: Receipt
           <div>Tgl&nbsp;&nbsp;: {data.tanggal}</div>
           <div>User : {data.nama_peminjam}</div>
           {data.petugas ? <div>Petg : {data.petugas}</div> : null}
+          {data.guru_pendamping ? <div>Guru : {data.guru_pendamping}</div> : null}
+          
         </div>
 
         <div className="receipt58__divider">{dashedLine()}</div>
