@@ -7,12 +7,40 @@
 
 const { Pool } = require('pg');
 require('dotenv').config();
+const net = require('net');
+
+function safeParseDatabaseUrl(databaseUrl) {
+  if (!databaseUrl) return null;
+  try {
+    return new URL(databaseUrl);
+  } catch {
+    return null;
+  }
+}
+
+function isSupabasePoolerHost(hostname) {
+  return typeof hostname === 'string' && hostname.endsWith('.pooler.supabase.com');
+}
+
+function derivePort(databaseUrl) {
+  const url = safeParseDatabaseUrl(databaseUrl);
+  const hostname = url?.hostname;
+  const urlPort = url?.port ? Number(url.port) : undefined;
+  const forcedPort = process.env.SUPABASE_POOLER_PORT
+    ? Number(process.env.SUPABASE_POOLER_PORT)
+    : undefined;
+  if (!isSupabasePoolerHost(hostname)) return urlPort;
+  return forcedPort ?? (urlPort === 5432 || !urlPort ? 6543 : urlPort);
+}
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ...(derivePort(process.env.DATABASE_URL) ? { port: derivePort(process.env.DATABASE_URL) } : {}),
   ssl: {
-    require: true,
     rejectUnauthorized: false,
+    ...(net.isIP(safeParseDatabaseUrl(process.env.DATABASE_URL)?.hostname || '') === 0
+      ? { servername: safeParseDatabaseUrl(process.env.DATABASE_URL)?.hostname }
+      : {}),
   },
 });
 
