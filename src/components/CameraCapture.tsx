@@ -14,6 +14,8 @@ interface CameraCaptureProps {
   cropSquare?: boolean; // crop to 1:1 square (only for add barang)
 }
 
+// sjd 
+
 const CameraCapture = ({
   onCapture,
   label = "Ambil Foto",
