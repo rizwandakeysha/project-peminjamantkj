@@ -114,14 +114,6 @@ const BorrowFlow = () => {
   // Shopping Cart state - multiple items
   const [cart, setCart] = useState<BarangData[]>([]);
 
-  // Cart/scan step state
-  const [selectedJenisCode, setSelectedJenisCode] = useState<string | null>(
-    null
-  );
-  const [availableItems, setAvailableItems] = useState<BarangData[]>([]);
-  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
-  const [selectedItem, setSelectedItem] = useState<BarangData | null>(null);
-  const [searchBarang, setSearchBarang] = useState<string>("");
   const [showDetailDialog, setShowDetailDialog] = useState<boolean>(false);
   const [detailDialogItem, setDetailDialogItem] = useState<BarangData | null>(null);
 
@@ -156,7 +148,6 @@ const BorrowFlow = () => {
   const kelasTriggerRef = useRef<HTMLButtonElement | null>(null);
   const namaTriggerRef = useRef<HTMLButtonElement | null>(null);
   const guruTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const searchBarangRef = useRef<HTMLInputElement | null>(null);
 
   // Summary state
   const [borrowingCode, setBorrowingCode] = useState<string>("");
@@ -291,66 +282,32 @@ const BorrowFlow = () => {
     }
   }, [currentStep, scanMode]);
 
-  // Auto-focus search barang input after QR scan
-  useEffect(() => {
-    if (currentStep === "cart" && availableItems.length > 0) {
-      const timer = setTimeout(() => {
-        searchBarangRef.current?.focus();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [currentStep, availableItems]);
-
   // Cart management functions
   const addToCart = (item: BarangData) => {
-    // Check if item already in cart
-    if (cart.some(i => (i.id || i.id_barang) === (item.id || item.id_barang))) {
-      toast.error("Barang sudah ada di keranjang");
-      return;
-    }
-    setCart([...cart, item]);
-    toast.success(`${item.nama_barang} ditambahkan ke keranjang`);
+    setCart((prev) => {
+      if (prev.some((i) => (i.id || i.id_barang) === (item.id || item.id_barang))) {
+        toast.error("Barang sudah ada di keranjang");
+        return prev;
+      }
+      toast.success(`${item.nama_barang} ditambahkan ke keranjang`);
+      return [...prev, item];
+    });
   };
 
   const removeFromCart = (itemId: number) => {
-    const item = cart.find(i => (i.id || i.id_barang) === itemId);
-    setCart(cart.filter(i => (i.id || i.id_barang) !== itemId));
-    if (item) {
-      toast.success(`${item.nama_barang} dihapus dari keranjang`);
-    }
+    setCart((prev) => {
+      const item = prev.find((i) => (i.id || i.id_barang) === itemId);
+      const next = prev.filter((i) => (i.id || i.id_barang) !== itemId);
+      if (item) toast.success(`${item.nama_barang} dihapus dari keranjang`);
+      return next;
+    });
   };
 
   const clearCart = () => {
-    setCart([]);
-    toast.success("Keranjang dikosongkan");
-  };
-
-  const handleAddSelectedToCart = () => {
-    if (availableItems.length > 0) {
-      // Multiple items selection mode
-      if (selectedItemIds.length === 0) {
-        toast.error("Pilih minimal satu barang");
-        return;
-      }
-      const itemsToAdd = availableItems.filter(item => 
-        selectedItemIds.includes(item.id || item.id_barang || 0)
-      );
-      itemsToAdd.forEach(item => {
-        if (!cart.some(i => (i.id || i.id_barang) === (item.id || item.id_barang))) {
-          addToCart(item);
-        }
-      });
-      // Reset selection
-      setSelectedItemIds([]);
-      setAvailableItems([]);
-      setSelectedJenisCode(null);
-      setSearchBarang("");
-    } else if (selectedItem) {
-      // Single item mode
-      addToCart(selectedItem);
-      setSelectedItem(null);
-      setSelectedJenisCode(null);
-    }
+    setCart(() => {
+      toast.success("Keranjang dikosongkan");
+      return [];
+    });
   };
 
   const handleContinueToPhoto = () => {
@@ -383,61 +340,37 @@ const BorrowFlow = () => {
 
         lastScanRef.current = { code: scannedCode, time: now };
 
-        // Try to match jenis_barang via API first
+        // BARU: scan hanya KODE BARANG (barcode/QR di barang), lalu auto-masuk keranjang
+        let item: BarangData | null = null;
+
         try {
-          const itemsOfJenis = await barangAPI.getByJenis(scannedCode);
-          
-          // Filter to only available items
-          const availableByJenis = itemsOfJenis.filter(b => b.status === "Tersedia");
-          
-          if (availableByJenis.length > 0) {
-            setSelectedJenisCode(scannedCode);
-            setAvailableItems(availableByJenis);
-            setSelectedItem(null);
-            setSelectedItemIds([]);
-            setSearchBarang("");
-            toast.success(
-              `${availableByJenis.length} barang tersedia untuk jenis "${scannedCode}"`
-            );
-            return;
-          } else if (itemsOfJenis.length > 0) {
-            // Jenis found but all items not available
-            toast.error(
-              `Jenis "${scannedCode}" ditemukan tapi semua barang sedang dipinjam`
-            );
-            return;
-          }
-        } catch (jenisError) {
-          // Jenis tidak ditemukan, lanjut ke fallback
+          item = (await barangAPI.getByKode(scannedCode)) as unknown as BarangData | null;
+        } catch {
+          // ignore; fallback ke cache allBarang
         }
 
-        // Fallback: Try to find by kode_barang (individual item)
-        const barangByKodeAny = allBarang.find(
-          (b) => {
-            const normBarangCode = (b.kode_barang || "")
-              .trim()
-              .replace(/[\s\t\n\r]/g, "")
-              .toUpperCase();
-            return normBarangCode === scannedCode;
-          }
-        );
+        if (!item) {
+          item =
+            allBarang.find((b) => {
+              const normBarangCode = (b.kode_barang || "")
+                .trim()
+                .replace(/[\s\t\n\r]/g, "")
+                .toUpperCase();
+              return normBarangCode === scannedCode;
+            }) || null;
+        }
 
-        const barangByKode = barangByKodeAny?.status === "Tersedia" ? barangByKodeAny : null;
-
-        if (barangByKode) {
-          setSelectedItem(barangByKode);
-          setSelectedJenisCode(barangByKode.kode_jenis || null);
-          setAvailableItems([]);
-          setSelectedItemIds([]);
-          setSearchBarang("");
-          toast.success(`Barang "${barangByKode.nama_barang}" dipilih`);
+        if (!item) {
+          toast.error(`Kode barang tidak ditemukan: "${decodedText}"`);
           return;
         }
 
-        // If nothing found
-        toast.error(
-          `QR Code tidak valid: "${decodedText}"\n\nTidak ada kode barang atau jenis yang cocok`
-        );
+        if (item.status !== "Tersedia") {
+          toast.error(`Barang "${item.nama_barang}" tidak tersedia (${item.status})`);
+          return;
+        }
+
+        addToCart(item);
       } catch (error) {
         console.error("Error in QR scan:", error);
         toast.error("Gagal memproses QR Code");
@@ -450,7 +383,7 @@ const BorrowFlow = () => {
     const kodeBarang = manualInputRef.current?.value?.trim();
 
     if (!kodeBarang) {
-      toast.error("Masukkan kode barang atau jenis");
+      toast.error("Masukkan kode barang");
       manualInputRef.current?.focus();
       return;
     }
@@ -644,7 +577,7 @@ const BorrowFlow = () => {
               </p>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleFormSubmit} className="space-y-4">
+              <form onSubmit={handleFormSubmit} className="space-y-4" autoComplete="off">
                 {/* Role Selection */}
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
@@ -877,7 +810,12 @@ const BorrowFlow = () => {
                     <Label htmlFor="kontak">Nomor Kontak (WA) *</Label>
                     <Input
                       id="kontak"
+                      name="kontak_no_autofill"
                       type="tel"
+                      inputMode="tel"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
                       value={formData.kontak}
                       onChange={(e) =>
                         setFormData({ ...formData, kontak: e.target.value })
@@ -1052,118 +990,22 @@ const BorrowFlow = () => {
                     </div>
                   ) : (
                     <div className="rounded-2xl border p-4 space-y-3">
-                      <Label htmlFor="manual-code">Kode Barang atau Jenis</Label>
+                      <Label htmlFor="manual-code">Kode Barang</Label>
                       <div className="flex gap-2">
                         <Input
                           id="manual-code"
-                          placeholder="Contoh: TKJ-LAPT"
+                          placeholder="Scan barcode..."
                           ref={manualInputRef}
-                          onKeyPress={(e) => e.key === "Enter" && handleManualCode()}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleManualCode();
+                            }
+                          }}
                         />
                         <Button onClick={handleManualCode}>
-                          Cari
+                          Tambah
                         </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Available Items Selection (jika ada) */}
-                  {availableItems.length > 0 && (
-                    <div className="space-y-3 mt-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold">Jenis: {selectedJenisCode}</h3>
-                          <p className="text-sm text-muted-foreground">{availableItems.length} barang tersedia</p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setAvailableItems([]);
-                            setSelectedJenisCode(null);
-                            setSelectedItemIds([]);
-                            setSearchBarang("");
-                          }}
-                        >
-                          Ganti Jenis / Scan Lagi
-                        </Button>
-                      </div>
-
-                      {/* Search */}
-                      <Input
-                        ref={searchBarangRef}
-                        placeholder="Cari barang..."
-                        value={searchBarang}
-                        onChange={(e) => setSearchBarang(e.target.value)}
-                      />
-
-                      {/* Items Grid with Hover Detail/Select */}
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
-                        {availableItems
-                          .filter((item) =>
-                            item.kode_barang.toLowerCase().includes(searchBarang.toLowerCase()) ||
-                            item.nama_barang.toLowerCase().includes(searchBarang.toLowerCase())
-                          )
-                          .map((item) => {
-                            const isInCart = cart.some(i => (i.id || i.id_barang) === (item.id || item.id_barang));
-                            return (
-                              <div
-                                key={item.id || item.id_barang}
-                                className="relative rounded-lg border overflow-hidden group cursor-pointer transition-all hover:shadow-lg"
-                              >
-                                {/* Item Image */}
-                                {item.foto_barang && (
-                                  <img
-                                    src={getPhotoUrl(item.foto_barang, API_BASE_URL)}
-                                    alt={item.nama_barang}
-                                    className="w-full h-24 object-cover"
-                                  />
-                                )}
-                                
-                                {/* Item Name and Code - Always Visible */}
-                                <div className="p-2 text-center text-xs bg-card">
-                                  <p className="font-medium line-clamp-1">{item.nama_barang}</p>
-                                  <p className="text-muted-foreground text-xs line-clamp-1">{item.kode_barang}</p>
-                                </div>
-
-                                {/* Hover Overlay with Detail/Select Buttons */}
-                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-                                  <Button
-                                    size="sm"
-                                    variant="secondary"
-                                    className="w-full text-xs"
-                                    onClick={() => {
-                                      setDetailDialogItem(item);
-                                      setShowDetailDialog(true);
-                                    }}
-                                  >
-                                    Detail
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    className="w-full text-xs"
-                                    disabled={isInCart}
-                                    onClick={() => {
-                                      if (isInCart) {
-                                        toast.error("Sudah ada di keranjang");
-                                      } else {
-                                        addToCart(item);
-                                      }
-                                    }}
-                                  >
-                                    {isInCart ? "Di Keranjang" : "Pilih"}
-                                  </Button>
-                                </div>
-
-                                {/* Overlay if already in cart */}
-                                {isInCart && (
-                                  <div className="absolute inset-0 bg-background/70 flex items-center justify-center rounded-lg">
-                                    <Badge variant="secondary" className="text-xs">Di Keranjang</Badge>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
                       </div>
                     </div>
                   )}

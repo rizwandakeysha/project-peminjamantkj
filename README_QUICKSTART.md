@@ -116,6 +116,44 @@ npm run dev
 
 Lihat **SETUP_LOCAL.md** untuk panduan detail lengkap.
 
+## 🟩 (Opsional) Pakai Supabase Tanpa Render (Free Plan)
+
+Kamu bisa menjalankan frontend tanpa backend Render dengan cara frontend query langsung ke Supabase.
+Ini cocok untuk Free Plan, tapi pastikan aturan keamanan (RLS) diaktifkan sebelum produksi.
+
+### 1) Ambil Project URL & Anon Key
+- Supabase Dashboard → Project Settings → API
+- Copy:
+   - Project URL → isi ke `VITE_SUPABASE_URL`
+   - anon public key → isi ke `VITE_SUPABASE_ANON_KEY`
+
+### 2) Set environment variables di frontend
+Di root project:
+```bash
+cp .env.example .env
+```
+Lalu isi:
+```
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
+
+### 3) (Jika pakai upload foto) Buat Storage Bucket
+- Supabase Dashboard → Storage → Create bucket
+- Nama bucket (misalnya): `uploads`
+- Simpan nama bucket di `.env` (optional):
+```
+VITE_SUPABASE_STORAGE_BUCKET=uploads
+```
+
+Catatan: Upload langsung dari browser butuh policy bucket/RLS yang benar.
+
+### 4) Jalankan frontend
+```bash
+npm install
+npm run dev
+```
+
 ## 🆘 Butuh Bantuan?
 
 1. Cek console error di browser (F12)
