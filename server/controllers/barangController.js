@@ -1,5 +1,58 @@
 const db = require('../config/database');
 
+function normalizeText(value) {
+  const str = String(value ?? '').trim();
+  return str.length ? str : null;
+}
+
+function deriveBarangPrefixFromKodeJenis(kodeJenis) {
+  const raw = String(kodeJenis ?? '').trim();
+  const last = raw.split('-').pop() || raw;
+  return String(last).toUpperCase();
+}
+
+async function generateNextKodeBarangForJenis(client, jenisId) {
+  const jenisRes = await client.query(
+    'SELECT kode_jenis_barang FROM jenis_barang WHERE id_jenis_barang = $1',
+    [jenisId]
+  );
+  if (jenisRes.rows.length === 0) {
+    const err = new Error('Jenis barang tidak ditemukan');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const prefix = deriveBarangPrefixFromKodeJenis(jenisRes.rows[0].kode_jenis_barang);
+  if (!prefix) {
+    const err = new Error('Kode jenis barang tidak valid');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // Fetch existing codes for this jenis with the same prefix
+  const existingRes = await client.query(
+    `SELECT kode_barang
+     FROM barang
+     WHERE id_jenis_barang = $1
+       AND UPPER(kode_barang) LIKE $2`,
+    [jenisId, `${prefix}-%`]
+  );
+
+  const usedNumbers = new Set();
+  for (const row of existingRes.rows) {
+    const kode = String(row.kode_barang || '').toUpperCase();
+    if (!kode.startsWith(prefix)) continue;
+    const parts = kode.split('-');
+    const lastPart = parts[parts.length - 1];
+    const num = parseInt(lastPart, 10);
+    if (!Number.isNaN(num)) usedNumbers.add(num);
+  }
+
+  let nextNumber = 1;
+  while (usedNumbers.has(nextNumber)) nextNumber += 1;
+  return `${prefix}-${nextNumber}`;
+}
+
 // Get all barang
 exports.getAllBarang = async (req, res) => {
   try {
@@ -168,49 +221,141 @@ exports.createBarang = async (req, res) => {
   try {
     const { kode_barang, nama_barang, deskripsi_barang, foto_barang, no_serial_number, id_jenis_barang, status } = req.body;
 
-    if (!kode_barang || !nama_barang) {
+    const normalizedNama = normalizeText(nama_barang);
+    const normalizedKode = normalizeText(kode_barang);
+    const normalizedJenisId = id_jenis_barang ?? null;
+
+    if (!normalizedNama) {
       return res.status(400).json({
         success: false,
-        message: 'Kode barang dan nama barang harus diisi',
+        message: 'Nama barang harus diisi',
       });
     }
 
-    const result = await db.query(
-      `INSERT INTO barang (kode_barang, nama_barang, deskripsi_barang, foto_barang, no_serial_number, id_jenis_barang, status) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
-       RETURNING id_barang`,
-      [kode_barang, nama_barang, deskripsi_barang || null, foto_barang || null, no_serial_number || null, id_jenis_barang || null, status || 'Tersedia']
-    );
+    if (!normalizedKode && !normalizedJenisId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Pilih jenis barang terlebih dahulu (atau isi kode barang manual)',
+      });
+    }
 
-    const newId = result.rows[0].id_barang;
+    const normalizedNoSerial = normalizeText(no_serial_number);
+    const normalizedDeskripsi = normalizeText(deskripsi_barang);
+    const normalizedFoto = normalizeText(foto_barang);
+    const normalizedStatus = normalizeText(status) || 'Tersedia';
 
-    // Get the created item with all fields
-    const newItemResult = await db.query(
-      `SELECT 
-        b.id_barang as id, 
-        b.kode_barang, 
-        b.nama_barang, 
-        b.foto_barang, 
-        b.status,
-        b.deskripsi_barang,
-        b.no_serial_number,
-        b.id_jenis_barang,
-        jb.kode_jenis_barang as kode_jenis,
-        jb.nama_jenis_barang as nama_jenis,
-        b.created_at 
-      FROM barang b
-      LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
-      WHERE b.id_barang = $1`,
-      [newId]
-    );
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
 
-    res.status(201).json({
-      success: true,
-      message: 'Barang created successfully',
-      data: newItemResult.rows[0],
-    });
+      // Prevent collisions across concurrent inserts for the same jenis
+      if (normalizedJenisId) {
+        await client.query('SELECT pg_advisory_xact_lock($1)', [Number(normalizedJenisId)]);
+      }
+
+      let finalKodeBarang = normalizedKode ? String(normalizedKode).toUpperCase() : null;
+      const autoGenerate = !finalKodeBarang;
+
+      let insertResult = null;
+      if (!autoGenerate) {
+        insertResult = await client.query(
+          `INSERT INTO barang (kode_barang, nama_barang, deskripsi_barang, foto_barang, no_serial_number, id_jenis_barang, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id_barang`,
+          [
+            finalKodeBarang,
+            normalizedNama,
+            normalizedDeskripsi,
+            normalizedFoto,
+            normalizedNoSerial,
+            normalizedJenisId,
+            normalizedStatus,
+          ]
+        );
+      } else {
+        // Retry a few times in case of unexpected unique collisions
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          finalKodeBarang = await generateNextKodeBarangForJenis(client, Number(normalizedJenisId));
+
+          // Use a savepoint so we can retry without aborting the whole transaction
+          await client.query('SAVEPOINT create_barang_sp');
+          try {
+            insertResult = await client.query(
+              `INSERT INTO barang (kode_barang, nama_barang, deskripsi_barang, foto_barang, no_serial_number, id_jenis_barang, status)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               RETURNING id_barang`,
+              [
+                finalKodeBarang,
+                normalizedNama,
+                normalizedDeskripsi,
+                normalizedFoto,
+                normalizedNoSerial,
+                normalizedJenisId,
+                normalizedStatus,
+              ]
+            );
+            await client.query('RELEASE SAVEPOINT create_barang_sp');
+            break;
+          } catch (e) {
+            await client.query('ROLLBACK TO SAVEPOINT create_barang_sp');
+            if (e && e.code === '23505') {
+              continue;
+            }
+            throw e;
+          }
+        }
+
+        if (!insertResult) {
+          throw new Error('Gagal membuat kode barang unik, silakan coba lagi');
+        }
+      }
+
+      const newId = insertResult.rows[0].id_barang;
+
+      const newItemResult = await client.query(
+        `SELECT 
+          b.id_barang as id, 
+          b.kode_barang, 
+          b.nama_barang, 
+          b.foto_barang, 
+          b.status,
+          b.deskripsi_barang,
+          b.no_serial_number,
+          b.id_jenis_barang,
+          jb.kode_jenis_barang as kode_jenis,
+          jb.nama_jenis_barang as nama_jenis,
+          b.created_at 
+        FROM barang b
+        LEFT JOIN jenis_barang jb ON b.id_jenis_barang = jb.id_jenis_barang
+        WHERE b.id_barang = $1`,
+        [newId]
+      );
+
+      await client.query('COMMIT');
+
+      return res.status(201).json({
+        success: true,
+        message: 'Barang created successfully',
+        data: newItemResult.rows[0],
+      });
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (_) {
+        // ignore rollback errors
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error('Error creating barang:', error);
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
     if (error.code === '23505') { // PostgreSQL duplicate key error
       return res.status(400).json({
         success: false,

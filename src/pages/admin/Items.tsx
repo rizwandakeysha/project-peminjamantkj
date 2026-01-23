@@ -52,6 +52,9 @@ import { createBarcodeDataURL, downloadBarcodePNG } from "@/lib/barcodeUtils";
 import { toast } from "react-hot-toast";
 import JSZip from "jszip";
 
+const normalizeForSearch = (value: unknown) =>
+  String(value ?? "").toLowerCase().trim();
+
 // Helper function to generate kode_jenis_barang from nama (4 most representative letters with TKJ- prefix)
 const generateKodeJenis = (namaJenis: string, strategyNum: number = 0): string => {
   // Split by spaces and get words
@@ -183,6 +186,10 @@ const Items = () => {
   const [loading, setLoading] = useState(true);
   const [savingBarang, setSavingBarang] = useState(false);
 
+  // Search state
+  const [jenisBarangSearchQuery, setJenisBarangSearchQuery] = useState("");
+  const [barangDialogSearchQuery, setBarangDialogSearchQuery] = useState("");
+
   // Fetch data from API on component mount
   useEffect(() => {
     const fetchData = async () => {
@@ -250,6 +257,13 @@ const Items = () => {
   const [barcodeDataUrl, setBarcodeDataUrl] = useState<string | null>(null);
   const [barcodeKode, setBarcodeKode] = useState<string>("");
   const [barcodeNama, setBarcodeNama] = useState<string>("");
+
+  // Reset dialog search when switching/opening jenis dialog
+  useEffect(() => {
+    if (showBarangDialog) {
+      setBarangDialogSearchQuery("");
+    }
+  }, [showBarangDialog, selectedJenisId]);
   
   // Separate print dialogs: QR-only and Barcode-only
   const [showQRPrintDialog, setShowQRPrintDialog] = useState(false);
@@ -1464,49 +1478,19 @@ const Items = () => {
         );
         toast.success("Barang berhasil diupdate!");
       } else {
-        // Create barang via API with auto-generated kode_barang
+        // Create barang via API with server-side unique kode_barang generation
         if (!selectedJenisId) {
           toast.error("Pilih jenis barang terlebih dahulu");
           return;
         }
-
-        const jenisBarang = jenisBarangList.find(
-          (j) => j.id_jenis_barang === selectedJenisId
-        );
-        const kodeJenis =
-          jenisBarang?.kode_jenis_barang || jenisBarang?.kode_jenis || "";
-
-        if (!kodeJenis) {
-          toast.error("Kode jenis barang tidak ditemukan");
-          return;
-        }
-
-        const localBarangForJenis = barangList.filter(
-          (b) =>
-            (b as any).id_jenis_barang === selectedJenisId ||
-            (b as any).id_jenis === selectedJenisId
-        );
-
-        let barangForJenis = localBarangForJenis;
-
-        try {
-          const latestBarang = await barangAPI.getByJenis(kodeJenis);
-          barangForJenis = mergeBarangByKode(latestBarang, localBarangForJenis);
-        } catch (err) {
-          console.error(
-            "Gagal mengambil daftar barang terbaru untuk kode jenis:",
-            err
-          );
-        }
-
-        const generatedKode = generateKodeBarang(kodeJenis, barangForJenis);
 
         // Create barang without foto first if it's base64
         let fotoValue = "https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400";
         
         const newBarang = {
           id_jenis_barang: selectedJenisId || 1,
-          kode_barang: generatedKode,
+          // Send empty code so backend generates a collision-proof kode_barang
+          kode_barang: "",
           nama_barang: barangFormData.nama_barang,
           no_serial_number: barangFormData.no_serial_number,
           deskripsi_barang: barangFormData.deskripsi_barang,
@@ -1549,7 +1533,7 @@ const Items = () => {
         }
         
         setBarangList([...barangList, createdBarang]);
-        toast.success(`Barang berhasil ditambahkan! (Kode: ${generatedKode})`);
+        toast.success(`Barang berhasil ditambahkan! (Kode: ${createdBarang.kode_barang || "-"})`);
       }
     } catch (error) {
       console.error("Error saving barang:", error);
@@ -2166,6 +2150,49 @@ const Items = () => {
     ).length,
   };
 
+  const normalizedJenisBarangQuery = normalizeForSearch(jenisBarangSearchQuery);
+
+  const filteredJenisBarangList = normalizedJenisBarangQuery
+    ? jenisBarangList.filter((jenis) => {
+        const jenisMatches = [
+          jenis.kode_jenis_barang,
+          jenis.nama_jenis_barang,
+          jenis.deskripsi_jenis_barang,
+        ].some((field) => normalizeForSearch(field).includes(normalizedJenisBarangQuery));
+
+        if (jenisMatches) return true;
+
+        const barangForJenis = getBarangForJenis(jenis.id_jenis_barang);
+        return barangForJenis.some((b) =>
+          [
+            b.kode_barang,
+            b.nama_barang,
+            b.no_serial_number,
+            b.deskripsi_barang,
+            b.status,
+          ].some((field) =>
+            normalizeForSearch(field).includes(normalizedJenisBarangQuery)
+          )
+        );
+      })
+    : jenisBarangList;
+
+  const barangForSelectedJenis = getBarangForJenis(selectedJenisId || 0);
+  const normalizedBarangDialogQuery = normalizeForSearch(barangDialogSearchQuery);
+  const filteredBarangForSelectedJenis = normalizedBarangDialogQuery
+    ? barangForSelectedJenis.filter((b) =>
+        [
+          b.kode_barang,
+          b.nama_barang,
+          b.no_serial_number,
+          b.deskripsi_barang,
+          b.status,
+        ].some((field) =>
+          normalizeForSearch(field).includes(normalizedBarangDialogQuery)
+        )
+      )
+    : barangForSelectedJenis;
+
   return (
     <AdminLayout>
       <div className="space-y-6">
@@ -2461,6 +2488,26 @@ const Items = () => {
             <CardTitle>Daftar Jenis Barang</CardTitle>
           </CardHeader>
           <CardContent>
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center mb-4">
+              <Input
+                placeholder="Cari jenis atau barang (nama/kode/SN/status)..."
+                value={jenisBarangSearchQuery}
+                onChange={(e) => setJenisBarangSearchQuery(e.target.value)}
+              />
+              {jenisBarangSearchQuery.trim().length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setJenisBarangSearchQuery("")}
+                  className="shrink-0"
+                >
+                  Reset
+                </Button>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground mb-3">
+              Menampilkan {filteredJenisBarangList.length} dari {jenisBarangList.length} jenis
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted border-b">
@@ -2475,7 +2522,7 @@ const Items = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {jenisBarangList.map((jenis) => {
+                  {filteredJenisBarangList.map((jenis) => {
                     const itemCount = getBarangForJenis(
                       jenis.id_jenis_barang
                     ).length;
@@ -2706,13 +2753,31 @@ const Items = () => {
                                     </DialogContent>
                                   </Dialog>
                                 </div>
+                                <div className="flex flex-col sm:flex-row gap-2 sm:items-center mb-4">
+                                  <Input
+                                    placeholder="Cari barang di jenis ini (nama/kode/SN/status)..."
+                                    value={barangDialogSearchQuery}
+                                    onChange={(e) => setBarangDialogSearchQuery(e.target.value)}
+                                  />
+                                  {barangDialogSearchQuery.trim().length > 0 && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() => setBarangDialogSearchQuery("")}
+                                      className="shrink-0"
+                                    >
+                                      Reset
+                                    </Button>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground mb-3">
+                                  Menampilkan {filteredBarangForSelectedJenis.length} dari {barangForSelectedJenis.length} barang
+                                </div>
                                 <div className="space-y-4">
-                                  {getBarangForJenis(selectedJenisId || 0)
-                                    .length > 0 ? (
+                                  {barangForSelectedJenis.length > 0 ? (
                                     <div className="space-y-3">
-                                      {getBarangForJenis(
-                                        selectedJenisId || 0
-                                      ).map((barang) => (
+                                      {filteredBarangForSelectedJenis.length > 0 ? (
+                                        filteredBarangForSelectedJenis.map((barang) => (
                                         <div
                                           key={barang.id || barang.id_barang}
                                           className="border rounded-lg p-4 hover:shadow-md transition-shadow flex gap-4"
@@ -2881,7 +2946,12 @@ const Items = () => {
                                             </div>
                                           </div>
                                         </div>
-                                      ))}
+                                      ))
+                                      ) : (
+                                        <div className="border rounded-lg p-4 text-sm text-muted-foreground">
+                                          Tidak ada barang yang cocok dengan pencarian.
+                                        </div>
+                                      )}
                                     </div>
                                   ) : (
                                     <div className="text-center py-12 text-muted-foreground">
